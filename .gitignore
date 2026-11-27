@@ -143,3 +143,8 @@ crashlytics-build.properties
 # Timeline Binding Guardian のテスト素材（テスト実行時に自動生成）
 /[Aa]ssets/TBGTestFixtures/
 /[Aa]ssets/TBGTestFixtures.meta
+
+# 開発用のメモ・仕様書・Claude Code の設定（公開しない）
+/docs/
+/tasks/
+/.claude/

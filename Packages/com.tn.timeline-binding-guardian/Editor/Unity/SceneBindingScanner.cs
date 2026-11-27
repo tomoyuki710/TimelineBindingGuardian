@@ -215,7 +215,7 @@ namespace TimelineBindingGuardian
         }
 
         /// <summary>
-        /// Phase 0 の判定規則（Docs~/Phase0_Investigation_JP.md 5章）。
+        /// Phase 0 の判定規則（Phase 0 の調査記録 5章。開発用リポジトリの Assets/TBGValidation/Docs~/Phase0_Investigation_JP.md）。
         /// </summary>
         private static LocalState GetLocalState(ValueState valueState, bool valueOverridden, bool changed, bool sizeOverridden, out string note)
         {
