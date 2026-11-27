@@ -40,7 +40,8 @@ namespace TimelineBindingGuardian
             return results;
         }
 
-        public ScanResult Scan(Scene scene)
+        /// <param name="fingerprint">計算済みの指紋（自動検査で既に計算した場合）。null なら、保存済みの状態のときにここで計算する。</param>
+        public ScanResult Scan(Scene scene, string fingerprint = null)
         {
             List<string> diagnostics = new List<string>();
             AssetLocator owner = PrefabContextResolver.CreateSceneLocator(scene);
@@ -67,7 +68,7 @@ namespace TimelineBindingGuardian
             bool isSavedState = owner.IsSaved && !scene.isDirty;
             if (isSavedState)
             {
-                result.SourceFingerprint = ScopeFingerprint.Compute(scene.path);
+                result.SourceFingerprint = fingerprint ?? ScopeFingerprint.Compute(scene.path);
             }
 
             return result;
@@ -76,7 +77,8 @@ namespace TimelineBindingGuardian
         /// <summary>
         /// Prefab Asset を直接ロードして（LoadPrefabContents は使わない）、その Asset を文脈とした状態を取得する。
         /// </summary>
-        public ScanResult ScanPrefabAsset(string assetPath)
+        /// <param name="fingerprint">計算済みの指紋（自動検査で既に計算した場合）。null ならここで計算する。</param>
+        public ScanResult ScanPrefabAsset(string assetPath, string fingerprint = null)
         {
             List<string> diagnostics = new List<string>();
             List<DirectorObservation> directors = new List<DirectorObservation>();
@@ -96,7 +98,7 @@ namespace TimelineBindingGuardian
             ScanResult prefabResult = new ScanResult(PrefabContextResolver.CreateAssetLocator(assetPath), GetUtcNow(), directors, diagnostics);
             if (root != null)
             {
-                prefabResult.SourceFingerprint = ScopeFingerprint.Compute(assetPath);
+                prefabResult.SourceFingerprint = fingerprint ?? ScopeFingerprint.Compute(assetPath);
             }
 
             return prefabResult;

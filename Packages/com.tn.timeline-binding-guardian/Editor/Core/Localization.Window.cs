@@ -32,8 +32,8 @@ namespace TimelineBindingGuardian
 
             // ステータス
             table["window.status.initial"] = (
-                "Scenes and prefabs are checked automatically when saved, imported, or opened. Press \"{0}\" to inspect the open scene.",
-                "Scene と Prefab は保存・インポート・オープン時に自動で検査されます。開いている Scene を検査するには「{0}」を押してください。");
+                "Changes are checked automatically when you save or open a scene, close Prefab Mode, or start Unity (not while you are editing). Press \"{0}\" to inspect the open scene now.",
+                "変更は、Scene を保存したとき・開いたとき、Prefab Mode を閉じたとき、Unity の起動時に自動で検査します（作業中は検査しません）。今すぐ開いている Scene を検査するには「{0}」を押してください。");
             table["window.status.playMode"] = (
                 "Scanning is disabled in Play Mode. Only stable Edit Mode states are inspected.",
                 "Play Mode 中は検査できません。安定した Edit Mode の状態のみを検査します。");

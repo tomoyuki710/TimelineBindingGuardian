@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -38,6 +39,7 @@ namespace TimelineBindingGuardian
             EditorSceneManager.sceneSaved += OnSceneSaved;
             EditorSceneManager.sceneOpened += OnSceneOpened;
             PrefabStage.prefabSaved += OnPrefabSaved;
+            PrefabStage.prefabStageClosing += OnPrefabStageClosing;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             ScanScheduler.Initialize();
             _registered = true;
@@ -48,6 +50,7 @@ namespace TimelineBindingGuardian
             EditorSceneManager.sceneSaved -= OnSceneSaved;
             EditorSceneManager.sceneOpened -= OnSceneOpened;
             PrefabStage.prefabSaved -= OnPrefabSaved;
+            PrefabStage.prefabStageClosing -= OnPrefabStageClosing;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             ScanScheduler.Shutdown();
             _registered = false;
@@ -56,6 +59,7 @@ namespace TimelineBindingGuardian
         private static void OnStartup()
         {
             ScanScheduler.EnqueueLoadedScenes(Lang.T("engine.reason.editorStartup"));
+            ScanScheduler.Release();
         }
 
         private static void OnBeforeAssemblyReload()
@@ -66,11 +70,21 @@ namespace TimelineBindingGuardian
         private static void OnSceneSaved(Scene scene)
         {
             ScanScheduler.Enqueue(scene.path, ScanTargetKind.Scene, Lang.T("engine.reason.sceneSaved"));
+            ScanScheduler.Release();
         }
 
         private static void OnSceneOpened(Scene scene, OpenSceneMode mode)
         {
             ScanScheduler.Enqueue(scene.path, ScanTargetKind.Scene, Lang.T("engine.reason.sceneOpened"));
+            ScanScheduler.Release();
+        }
+
+        /// <summary>
+        /// Prefab Mode を閉じる区切り。閉じ終わるまでは ScanScheduler が Prefab Mode 中として待つ。
+        /// </summary>
+        private static void OnPrefabStageClosing(PrefabStage stage)
+        {
+            ScanScheduler.Release();
         }
 
         private static void OnPrefabSaved(GameObject prefabContentsRoot)
@@ -90,45 +104,35 @@ namespace TimelineBindingGuardian
     {
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
-            bool relevant = false;
+            // 依存一覧のキャッシュは、変わったアセットとそれを含む一覧だけを捨てる（全部捨てると、毎回すべてを取り直すことになり重い）
+            DependencyIndex.Invalidate(importedAssets.Concat(deletedAssets).Concat(movedAssets).Concat(movedFromAssetPaths));
+
             foreach (string path in importedAssets)
             {
-                relevant |= EnqueueIfRelevant(path, Lang.T("engine.reason.assetImported"));
+                EnqueueIfRelevant(path, Lang.T("engine.reason.assetImported"));
             }
 
             foreach (string path in movedAssets)
             {
-                relevant |= EnqueueIfRelevant(path, Lang.T("engine.reason.assetMoved"));
-            }
-
-            if (relevant || deletedAssets.Length > 0)
-            {
-                DependencyIndex.Invalidate();
+                EnqueueIfRelevant(path, Lang.T("engine.reason.assetMoved"));
             }
         }
 
-        private static bool EnqueueIfRelevant(string path, string reason)
+        private static void EnqueueIfRelevant(string path, string reason)
         {
             if (path.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase))
             {
                 ScanScheduler.Enqueue(path, ScanTargetKind.Prefab, reason);
-                return true;
             }
-
-            if (path.EndsWith(".unity", System.StringComparison.OrdinalIgnoreCase))
+            else if (path.EndsWith(".unity", System.StringComparison.OrdinalIgnoreCase))
             {
                 // 読み込まれていない Scene は検査時に読み飛ばされる（開いたときに検査される）
                 ScanScheduler.Enqueue(path, ScanTargetKind.Scene, reason);
-                return true;
             }
-
-            if (path.EndsWith(".playable", System.StringComparison.OrdinalIgnoreCase))
+            else if (path.EndsWith(".playable", System.StringComparison.OrdinalIgnoreCase))
             {
                 ScanScheduler.Enqueue(path, ScanTargetKind.Timeline, reason);
-                return true;
             }
-
-            return false;
         }
     }
 }

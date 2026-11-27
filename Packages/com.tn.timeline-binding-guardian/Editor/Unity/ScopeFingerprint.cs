@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -13,13 +14,17 @@ namespace TimelineBindingGuardian
     /// - Scope 自身と、依存する Prefab・Scene・Timeline（.prefab / .unity / .playable）はファイルの内容をハッシュする。
     /// - それ以外の依存（Track の型のスクリプトなど）は Unity の依存ハッシュを使う（軽い）。
     /// - 検査ロジックの版と Unity のバージョンも含める（検査の中身が変わったら全件を検査し直すため）。
+    /// 負荷対策:
+    /// - 依存一覧は DependencyIndex のキャッシュを共有する（変わったアセットの分だけ取り直す）。
+    /// - ファイル内容のハッシュは、ファイルサイズと最終更新時刻が同じなら使い回す（変わっていないファイルは読み直さない）。
     /// </summary>
     public static class ScopeFingerprint
     {
-        // 検査結果に影響する変更をしたら上げる
-        public const string LogicVersion = "1";
+        // 検査結果に影響する変更、または指紋の作り方を変えたら上げる（2: ファイルごとのハッシュを使い回す方式）
+        public const string LogicVersion = "2";
 
         private static readonly string[] ContentHashedExtensions = { ".unity", ".prefab", ".playable" };
+        private static readonly Dictionary<string, FileHash> _fileHashes = new Dictionary<string, FileHash>(StringComparer.Ordinal);
 
         /// <summary>
         /// 指紋を計算する。ファイルが読めなければ空文字（比較では常に「変化あり」になる）。
@@ -36,14 +41,12 @@ namespace TimelineBindingGuardian
                 using (MD5 md5 = MD5.Create())
                 {
                     Append(md5, $"tbg-fingerprint:{LogicVersion}:{Application.unityVersion}\n");
-                    string[] dependencies = AssetDatabase.GetDependencies(assetPath, true);
-                    foreach (string path in dependencies.OrderBy(p => p, StringComparer.Ordinal))
+                    foreach (string path in DependencyIndex.GetSortedDependencies(assetPath))
                     {
                         Append(md5, path + "\n");
                         if (IsContentHashed(path))
                         {
-                            byte[] content = File.ReadAllBytes(path);
-                            md5.TransformBlock(content, 0, content.Length, null, 0);
+                            Append(md5, GetContentHash(path));
                         }
                         else
                         {
@@ -65,6 +68,28 @@ namespace TimelineBindingGuardian
             }
         }
 
+        /// <summary>
+        /// ファイル内容のハッシュ。サイズと最終更新時刻が前回と同じなら、読み直さずに前回の値を返す。
+        /// </summary>
+        private static string GetContentHash(string path)
+        {
+            FileInfo file = new FileInfo(path);
+            long length = file.Length;
+            DateTime lastWriteUtc = file.LastWriteTimeUtc;
+            bool isCached = _fileHashes.TryGetValue(path, out FileHash cached) && cached.Length == length;
+            if (isCached && cached.LastWriteUtc == lastWriteUtc)
+            {
+                return cached.Hash;
+            }
+
+            using (MD5 md5 = MD5.Create())
+            {
+                string hash = BitConverter.ToString(md5.ComputeHash(File.ReadAllBytes(path))).Replace("-", string.Empty);
+                _fileHashes[path] = new FileHash(length, lastWriteUtc, hash);
+                return hash;
+            }
+        }
+
         private static bool IsContentHashed(string path)
         {
             return ContentHashedExtensions.Any(e => path.EndsWith(e, StringComparison.OrdinalIgnoreCase)) && File.Exists(path);
@@ -74,6 +99,22 @@ namespace TimelineBindingGuardian
         {
             byte[] bytes = Encoding.UTF8.GetBytes(text);
             hash.TransformBlock(bytes, 0, bytes.Length, null, 0);
+        }
+
+        private readonly struct FileHash
+        {
+            public FileHash(long length, DateTime lastWriteUtc, string hash)
+            {
+                Length = length;
+                LastWriteUtc = lastWriteUtc;
+                Hash = hash;
+            }
+
+            public long Length { get; }
+
+            public DateTime LastWriteUtc { get; }
+
+            public string Hash { get; }
         }
     }
 }

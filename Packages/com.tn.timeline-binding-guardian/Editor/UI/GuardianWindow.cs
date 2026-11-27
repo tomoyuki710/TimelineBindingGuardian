@@ -466,6 +466,8 @@ namespace TimelineBindingGuardian
         private void OnScanClicked()
         {
             Scan();
+            // 作業中に溜まった自動検査の要求（Prefab の変更など）も、このタイミングで処理する
+            ScanScheduler.Release();
         }
 
         private void OnBuildScenesScanClicked()

@@ -26,6 +26,8 @@ namespace TimelineBindingGuardian
         [SerializeField] private bool preBuildCheckEnabled = true;
         // 表示言語（既定は OS の言語設定に合わせる）
         [SerializeField] private LanguagePreference language = LanguagePreference.Auto;
+        // 自動検査 1 件ごとの処理時間を Console に出す（調査用、既定は OFF）
+        [SerializeField] private bool timingLogEnabled;
 
         public static event Action Changed;
 
@@ -95,6 +97,12 @@ namespace TimelineBindingGuardian
         {
             get => preBuildCheckEnabled;
             set => SetValue(ref preBuildCheckEnabled, value);
+        }
+
+        public bool TimingLogEnabled
+        {
+            get => timingLogEnabled;
+            set => SetValue(ref timingLogEnabled, value);
         }
 
         public IReadOnlyList<string> ExcludedFolders => excludedFolders ?? (excludedFolders = new List<string>());

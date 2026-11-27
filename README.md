@@ -18,7 +18,7 @@ Editor の中だけで動きます。ビルドには何も含まれず、ネッ�
 
 ## できること
 
-- **自動監視**: Scene や Prefab を開いたとき・保存したときに Timeline のバインドを検査し、変化を記録します。手動で何かを始める必要はありません。
+- **自動監視**: Scene を保存したとき・開いたとき、Prefab Mode を閉じたとき、Unity の起動時に、それまでの変更（Prefab の変更も含む）をまとめて検査し、変化を記録します。作業中（Hierarchy の編集、Override の Apply、Prefab Mode での編集など）は検査しないので、作業の途中で待たされません。手動で何かを始める必要はありません。
 - **通知**: バインドされていたものが空（NULL）になると、次の形で知らせます。
   - ウィンドウの通知
   - Console への警告
@@ -67,7 +67,7 @@ Unity 6000.4・6000.5 は、公式の API 情報に基づいて対応してい�
    バージョンを固定する場合（推奨）は、末尾にタグを付けます。
 
    ```
-   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.1
+   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.2
    ```
 
 4. Unity のコンパイルが終わったら、**Window > Timeline Binding Guardian** を開きます。
@@ -103,7 +103,7 @@ Git URL からパッケージを入れるには、PC に Git がインストー�
 | **通知** | 外れたバインドの一覧です。選ぶと、どの階層で変わったかが分かります。**復元のプレビュー…** や **消去** ができます。 |
 | **Scene のバインド** | 開いている Scene の現在のバインドを、階層ごと（Scene・Nested Prefab・元の Prefab）に表示します。 |
 | **履歴** | 記録した変化のすべてです。期間（「前回ビルド以降」など）や対象で絞り込めます。 |
-| **設定** | 自動監視、Hierarchy アイコン、Console への警告、ビルド前検査、言語、除外するフォルダー、意図的な NULL の一覧を設定します。 |
+| **設定** | 自動監視、Hierarchy アイコン、Console への警告、ビルド前検査、処理時間のログ（調査用）、言語、除外するフォルダー、意図的な NULL の一覧を設定します。 |
 
 開いている Scene をすぐ検査したいときは **今すぐ検査** を使います。Build Settings のすべての Scene を検査したいときは **Build Scene を検査…** を使います。
 
@@ -158,7 +158,8 @@ Git URL からパッケージを入れるには、PC に Git がインストー�
 ## 制約
 
 - **最初の検査より前の履歴は分かりません。** 最初に見たときにすでに空だったバインドは通知しません。
-- **すべての瞬間を記録するわけではありません。** 監視は Scene や Prefab を開いたとき・保存したときに行います。保存する前に変更して元に戻した場合は検知しません。
+- **すべての瞬間を記録するわけではありません。** 検査は、Scene を保存したとき・開いたとき、Prefab Mode を閉じたとき、Unity の起動時に行います。その間に変更して元に戻した場合は検知しません。
+- **作業中の変更は、次の区切りまで通知されません。** Override の Apply や Git の Pull による Prefab の変化は、Scene を保存するなどの区切りで検査されます。すぐに確かめたいときは「今すぐ検査」を押してください。
 - **未保存の Scene は記録しません。** 保存するまで、安定した ID がないためです。
 - **意図的な NULL も、そのままでは通知されます。** NULL が意図したものかどうかは、ツールには判断できません。意図したものなら、意図的な NULL の一覧に登録してください。
 - **対象は `PlayableDirector` の Generic Binding だけです。** クリップの `ExposedReference` は対象外です。

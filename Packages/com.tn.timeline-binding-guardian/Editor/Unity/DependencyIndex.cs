@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEditor;
 using UnityEngine.SceneManagement;
 
@@ -9,15 +7,35 @@ namespace TimelineBindingGuardian
     /// <summary>
     /// 履歴にある Scope（Scene / Prefab）→ 依存アセット（推移的）の逆引き。
     /// Prefab や Timeline が変わったときに、再検査すべき Scope と「影響の可能性があるが未検査の Scene」を求める。
-    /// 依存関係は AssetDatabase から取り、結果はメモリにキャッシュする（Scene・Prefab のインポートで破棄）。
+    /// 依存一覧は AssetDatabase から取り、メモリにキャッシュする（指紋の計算でも共有する）。
+    /// アセットがインポート・移動・削除されたら、そのアセットと、それを依存に含む一覧だけを捨てる。
     /// </summary>
     public static class DependencyIndex
     {
-        private static readonly Dictionary<string, HashSet<string>> _dependencies = new Dictionary<string, HashSet<string>>();
+        private static readonly DependencyCache _cache = new DependencyCache(path => AssetDatabase.GetDependencies(path, true));
 
+        /// <summary>
+        /// すべて捨てる（テスト用・確実に取り直したいとき）。
+        /// </summary>
         public static void Invalidate()
         {
-            _dependencies.Clear();
+            _cache.Clear();
+        }
+
+        /// <summary>
+        /// 変わったアセットと、それを依存に含む一覧だけを捨てる。
+        /// </summary>
+        public static void Invalidate(IEnumerable<string> changedPaths)
+        {
+            _cache.Invalidate(changedPaths);
+        }
+
+        /// <summary>
+        /// 依存一覧（推移的、自分自身を含む）を序数順に並べたもの。
+        /// </summary>
+        public static IReadOnlyList<string> GetSortedDependencies(string path)
+        {
+            return _cache.GetSorted(path);
         }
 
         /// <summary>
@@ -30,7 +48,7 @@ namespace TimelineBindingGuardian
             {
                 string scopePath = AssetDatabase.GUIDToAssetPath(scope.ScopeGuid);
                 bool isOther = !string.IsNullOrEmpty(scopePath) && scopePath != assetPath;
-                if (isOther && GetDependencies(scopePath).Contains(assetPath))
+                if (isOther && _cache.DependsOn(scopePath, assetPath))
                 {
                     result.Add(scopePath);
                 }
@@ -49,7 +67,7 @@ namespace TimelineBindingGuardian
             {
                 Scene scene = SceneManager.GetSceneAt(i);
                 bool isSavedAndLoaded = scene.isLoaded && !string.IsNullOrEmpty(scene.path);
-                if (isSavedAndLoaded && GetDependencies(scene.path).Contains(assetPath))
+                if (isSavedAndLoaded && _cache.DependsOn(scene.path, assetPath))
                 {
                     result.Add(scene.path);
                 }
@@ -62,17 +80,6 @@ namespace TimelineBindingGuardian
         {
             Scene scene = SceneManager.GetSceneByPath(scenePath);
             return scene.IsValid() && scene.isLoaded;
-        }
-
-        private static HashSet<string> GetDependencies(string path)
-        {
-            if (!_dependencies.TryGetValue(path, out HashSet<string> dependencies))
-            {
-                dependencies = new HashSet<string>(AssetDatabase.GetDependencies(path, true), StringComparer.Ordinal);
-                _dependencies.Add(path, dependencies);
-            }
-
-            return dependencies;
         }
     }
 }

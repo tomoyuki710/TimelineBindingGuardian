@@ -21,6 +21,7 @@ namespace TimelineBindingGuardian
         private readonly Toggle _hierarchyIcons;
         private readonly Toggle _consoleWarnings;
         private readonly Toggle _preBuildCheck;
+        private readonly Toggle _timingLog;
         private readonly Label _storeLabel;
         private readonly VisualElement _excludedList;
         private readonly VisualElement _intentionalList;
@@ -59,6 +60,11 @@ namespace TimelineBindingGuardian
             _preBuildCheck.RegisterValueChangedCallback(OnPreBuildCheckChanged);
             Root.Add(_preBuildCheck);
 
+            _timingLog = new Toggle(Lang.T("views.settings.timingLog"));
+            _timingLog.tooltip = Lang.T("views.settings.timingLog.tooltip");
+            _timingLog.RegisterValueChangedCallback(OnTimingLogChanged);
+            Root.Add(_timingLog);
+
             Root.Add(CreateHeader(Lang.T("views.settings.excluded.header")));
             Root.Add(CreateMutedLabel(Lang.T("views.settings.excluded.note", Lang.T("window.scanNow"))));
             _excludedList = new VisualElement();
@@ -93,6 +99,7 @@ namespace TimelineBindingGuardian
             _hierarchyIcons.SetValueWithoutNotify(settings.HierarchyIconsEnabled);
             _consoleWarnings.SetValueWithoutNotify(settings.ConsoleWarningsEnabled);
             _preBuildCheck.SetValueWithoutNotify(settings.PreBuildCheckEnabled);
+            _timingLog.SetValueWithoutNotify(settings.TimingLogEnabled);
 
             RefreshExcludedFolders(settings);
             RefreshIntentionalNulls();
@@ -263,6 +270,11 @@ namespace TimelineBindingGuardian
         private void OnPreBuildCheckChanged(ChangeEvent<bool> changeEvent)
         {
             GuardianSettings.Instance.PreBuildCheckEnabled = changeEvent.newValue;
+        }
+
+        private void OnTimingLogChanged(ChangeEvent<bool> changeEvent)
+        {
+            GuardianSettings.Instance.TimingLogEnabled = changeEvent.newValue;
         }
 
         private static Label CreateHeader(string text)

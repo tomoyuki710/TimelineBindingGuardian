@@ -66,21 +66,29 @@ namespace TimelineBindingGuardian
                 }
 
                 // 前回の記録から変わっていなければ検査を省く（dirty・除外フォルダは GuardianHistory.Record が理由付きで記録しない）
-                if (!scene.isDirty && IsUnchanged(history, scenePath))
+                // 指紋は 1 回だけ計算し、検査結果にもそのまま使う
+                string fingerprint = scene.isDirty ? null : ScopeFingerprint.Compute(scenePath);
+                if (fingerprint != null && history.IsUnchangedSinceLastRecord(scenePath, fingerprint))
                 {
                     continue;
                 }
 
-                results.Add(scanner.Scan(scene));
+                results.Add(scanner.Scan(scene, fingerprint));
             }
 
             foreach (string prefabPath in GetDependentPrefabPaths(scenePaths))
             {
                 GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 bool hasDirector = asset != null && asset.GetComponentInChildren<PlayableDirector>(true) != null;
-                if (hasDirector && !IsUnchanged(history, prefabPath))
+                if (!hasDirector)
                 {
-                    results.Add(scanner.ScanPrefabAsset(prefabPath));
+                    continue;
+                }
+
+                string fingerprint = ScopeFingerprint.Compute(prefabPath);
+                if (!history.IsUnchangedSinceLastRecord(prefabPath, fingerprint))
+                {
+                    results.Add(scanner.ScanPrefabAsset(prefabPath, fingerprint));
                 }
             }
 
@@ -102,11 +110,6 @@ namespace TimelineBindingGuardian
             }
 
             return record;
-        }
-
-        private static bool IsUnchanged(GuardianHistory history, string assetPath)
-        {
-            return history.IsUnchangedSinceLastRecord(assetPath, ScopeFingerprint.Compute(assetPath));
         }
 
         /// <summary>

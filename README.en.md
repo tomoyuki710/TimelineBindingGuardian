@@ -12,7 +12,7 @@ It runs in the Editor only. Nothing is added to your builds, and nothing is sent
 
 ## Features
 
-- **Automatic monitoring**: When you open or save a scene or prefab, the tool checks its Timeline bindings and records the changes. You do not need to start anything by hand.
+- **Automatic monitoring**: When you save or open a scene, close Prefab Mode, or start Unity, the tool checks the changes made since the last check (including prefab changes) and records them. It does not check while you are working (editing the Hierarchy, applying overrides, editing in Prefab Mode, and so on), so it never keeps you waiting in the middle of your work. You do not need to start anything by hand.
 - **Notifications**: When a binding that used to be bound becomes empty (null), you get:
   - a notification in the window,
   - a warning in the Console,
@@ -61,7 +61,7 @@ Unity 6000.4 and 6000.5 are supported based on Unity's official API documentatio
    To pin a specific version (recommended), add the tag at the end:
 
    ```
-   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.1
+   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.2
    ```
 
 4. After Unity finishes compiling, open **Window > Timeline Binding Guardian**.
@@ -97,7 +97,7 @@ Git must be installed for Unity to install a package from a Git URL.
 | **Notifications** | Bindings that were lost. Select one to see which level changed it, then use **Restore Preview…** or **Dismiss**. |
 | **Scene Bindings** | The current bindings of the open scenes, level by level (scene, nested prefabs, original prefab). |
 | **History** | All recorded changes, with filters for the period (including "Since last build") and the target. |
-| **Settings** | Monitoring, Hierarchy icons, Console warnings, the pre-build check, language, excluded folders, and the intentional-null list. |
+| **Settings** | Monitoring, Hierarchy icons, Console warnings, the pre-build check, the processing-time log (for troubleshooting), language, excluded folders, and the intentional-null list. |
 
 Use **Scan Now** to check the open scenes right away. Use **Scan Build Scenes…** to check every scene in Build Settings.
 
@@ -152,7 +152,8 @@ Nothing is stored inside the package itself.
 ## Limitations
 
 - **No history from before the first check.** A binding that was already empty when the tool first saw it is not reported.
-- **Not every moment is recorded.** Monitoring is based on opening and saving scenes and prefabs. If a binding is changed and changed back before saving, the tool does not see it.
+- **Not every moment is recorded.** Checks run when you save or open a scene, close Prefab Mode, or start Unity. If a binding is changed and changed back in between, the tool does not see it.
+- **Changes made while you work are reported at the next check.** Prefab changes from applying overrides or pulling with Git are checked when you save the scene (or at another of the moments above). Press **Scan Now** to check right away.
 - **Unsaved scenes are not recorded.** They have no stable ID until they are saved.
 - **Intentional nulls are notified by default.** The tool cannot tell whether a null was intended. Register it in the intentional-null list if it was.
 - **Only `PlayableDirector` generic bindings are covered.** `ExposedReference` fields in clips are not.

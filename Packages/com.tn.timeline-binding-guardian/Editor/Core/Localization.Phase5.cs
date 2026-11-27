@@ -12,11 +12,22 @@ namespace TimelineBindingGuardian
             AddPreBuild(table);
             AddBuildScan(table);
             AddIntentionalNull(table);
+            AddResponsiveness(table);
             table["common.listEmpty"] = ("Nothing to show.", "表示する項目はありません。");
             table["views.common.position"] = ("Position when recorded: {0}", "位置（記録時点）: {0}");
             table["views.common.position.tooltip"] = (
                 "Names with the sibling index (#n) at the time this was recorded. It is only for display: objects are identified by their GlobalObjectId, so deleting or reordering siblings later does not cause a mix-up, but later records may show a different number for the same object.",
                 "記録した時点の、名前と兄弟の中での番号（#n）です。表示のためだけのもので、オブジェクトの識別には GlobalObjectId を使っています。そのため、後で兄弟が削除・並べ替えされても取り違えることはありませんが、同じオブジェクトでも後の記録では番号が変わることがあります。");
+        }
+
+        private static void AddResponsiveness(Dictionary<string, (string En, string Ja)> table)
+        {
+            table["engine.defer.prefabMode"] = ("checked when Prefab Mode is closed", "Prefab Mode を閉じると検査します");
+            table["engine.defer.waitingForSave"] = ("checked when the scene is saved", "Scene を保存すると検査します");
+            table["views.settings.timingLog"] = ("Log processing time to the Console (for troubleshooting)", "処理時間を Console に出す（調査用）");
+            table["views.settings.timingLog.tooltip"] = (
+                "For each automatic check, log the target and the time it took (fingerprint, scan, record, and finding dependents) to the Console. Use it to find out what is slow.",
+                "自動検査 1 件ごとに、対象と処理時間の内訳（指紋の計算・検査・記録・依存先の予約）を Console に出します。何に時間がかかっているかを調べるときに使います。");
         }
 
         private static void AddIntentionalNull(Dictionary<string, (string En, string Ja)> table)

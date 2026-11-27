@@ -46,6 +46,11 @@ namespace TimelineBindingGuardian
 
         public int Count => _items.Count;
 
+        /// <summary>
+        /// 待っている要求（先頭から順）。Domain Reload で失わないよう退避するときに使う。
+        /// </summary>
+        public IReadOnlyList<ScanRequest> Items => _items;
+
         public void Enqueue(ScanRequest request, double now)
         {
             _lastEnqueueTime = now;
