@@ -1,0 +1,181 @@
+
+==== R1 Parent MiddleQ/Child#0 Audio: revert NULL override -> inherited ====
+target property=m_SceneBindings.Array.data[3].value prefabOverride(before)=True value=NULL (storedInstanceID=0)
+after revert (in contents): prefabOverride=False value=Parent/MiddleQ#1/Child#0/Speaker#3 [AudioSource#1] scene='<preview:Parent>' gid=GlobalObjectId_V1-2-fe5f048686e1a354ea6894382b7cff8d-5840211759620265810-3929092319383930656 (storedInstanceID=-1468)
+  Parent line 18: 'Audio: NULL override=True' -> 'Audio: Parent/MiddleQ#1/Child#0/Speaker#3[AudioSource] override=False'
+[PASS] Parent: binding table changed lines=1 expected=1
+  Variant line 18: 'Audio: NULL override=False' -> 'Audio: ParentVariant/MiddleQ#1/Child#0/Speaker#3[AudioSource] override=False'
+[PASS] Variant: binding table changed lines=1 expected=1
+[PASS] Middle: binding table changed lines=0 expected=0
+[PASS] Child: binding table changed lines=0 expected=0
+  Parent.mods - Parent/MiddleQ#1 :: target=GlobalObjectId_V1-1-19bddb193e5bdf445a87fac68ff3634f-768587366755053150-0 path=m_SceneBindings.Array.data[3].value value='' ref=<null>
+
+==== R2a Middle Child#1 Activation: revert NULL override -> inherited ====
+target property=m_SceneBindings.Array.data[2].value prefabOverride(before)=True value=NULL (storedInstanceID=0)
+after revert (in contents): prefabOverride=False value=Middle/Child#1/ActTarget#4 [GameObject] scene='<preview:Middle>' gid=GlobalObjectId_V1-2-19bddb193e5bdf445a87fac68ff3634f-4984987005497118077-7623881168746604681 (storedInstanceID=-2136)
+  Middle line 10: 'Activation: NULL override=True' -> 'Activation: Middle/Child#1/ActTarget#4[GameObject] override=False'
+[PASS] Middle: binding table changed lines=1 expected=1
+  Parent line 10: 'Activation: NULL override=False' -> 'Activation: Parent/MiddleP#0/Child#1/ActTarget#4[GameObject] override=False'
+  Parent line 24: 'Activation: NULL override=False' -> 'Activation: Parent/MiddleQ#1/Child#1/ActTarget#4[GameObject] override=False'
+[PASS] Parent: binding table changed lines=2 expected=2
+  Variant line 10: 'Activation: NULL override=False' -> 'Activation: ParentVariant/MiddleP#0/Child#1/ActTarget#4[GameObject] override=False'
+  Variant line 24: 'Activation: NULL override=False' -> 'Activation: ParentVariant/MiddleQ#1/Child#1/ActTarget#4[GameObject] override=False'
+[PASS] Variant: binding table changed lines=2 expected=2
+[PASS] Child: binding table changed lines=0 expected=0
+  Middle.mods - Middle/Child#1 :: target=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0 path=m_SceneBindings.Array.data[2].value value='' ref=<null>
+
+==== R2b Middle Child#1 Activation: restore explicit NULL (SetGenericBinding+Record) ====
+after SetGenericBinding: prefabOverride=True value=NULL (storedInstanceID=0)
+  Middle line 10: 'Activation: Middle/Child#1/ActTarget#4[GameObject] override=False' -> 'Activation: NULL override=True'
+[PASS] Middle: binding table changed lines=1 expected=1
+  Parent line 10: 'Activation: Parent/MiddleP#0/Child#1/ActTarget#4[GameObject] override=False' -> 'Activation: NULL override=False'
+  Parent line 24: 'Activation: Parent/MiddleQ#1/Child#1/ActTarget#4[GameObject] override=False' -> 'Activation: NULL override=False'
+[PASS] Parent: binding table changed lines=2 expected=2
+  Variant line 10: 'Activation: ParentVariant/MiddleP#0/Child#1/ActTarget#4[GameObject] override=False' -> 'Activation: NULL override=False'
+  Variant line 24: 'Activation: ParentVariant/MiddleQ#1/Child#1/ActTarget#4[GameObject] override=False' -> 'Activation: NULL override=False'
+[PASS] Variant: binding table changed lines=2 expected=2
+[PASS] Child: binding table changed lines=0 expected=0
+  Middle.mods + Middle/Child#1 :: target=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0 path=m_SceneBindings.Array.data[2].value value='' ref=<null>
+[PASS] R2b state equals state before R2a: Child.table
+[PASS] R2b state equals state before R2a: Child.mods
+[PASS] R2b state equals state before R2a: Middle.table
+[PASS] R2b state equals state before R2a: Middle.mods
+[PASS] R2b state equals state before R2a: Parent.table
+[PASS] R2b state equals state before R2a: Parent.mods
+[PASS] R2b state equals state before R2a: Variant.table
+[PASS] R2b state equals state before R2a: Variant.mods
+
+==== R3a Middle Child#1 AnimA: change AltActor -> Child#1/ActorB (SerializedProperty) ====
+after SerializedProperty set: prefabOverride=True value=Middle/Child#1/ActorB#2 [Animator#0] scene='<preview:Middle>' gid=GlobalObjectId_V1-2-19bddb193e5bdf445a87fac68ff3634f-3457908461702182814-7623881168746604681 (storedInstanceID=-2878)
+  Middle line 8: 'AnimA: Middle/AltActor#2[Animator] override=True' -> 'AnimA: Middle/Child#1/ActorB#2[Animator] override=True'
+[PASS] Middle: binding table changed lines=1 expected=1
+  Parent line 8: 'AnimA: Parent/MiddleP#0/AltActor#2[Animator] override=False' -> 'AnimA: Parent/MiddleP#0/Child#1/ActorB#2[Animator] override=False'
+  Parent line 22: 'AnimA: Parent/MiddleQ#1/AltActor#2[Animator] override=False' -> 'AnimA: Parent/MiddleQ#1/Child#1/ActorB#2[Animator] override=False'
+[PASS] Parent: binding table changed lines=2 expected=2
+  Variant line 8: 'AnimA: ParentVariant/MiddleP#0/AltActor#2[Animator] override=False' -> 'AnimA: ParentVariant/MiddleP#0/Child#1/ActorB#2[Animator] override=False'
+  Variant line 22: 'AnimA: ParentVariant/MiddleQ#1/AltActor#2[Animator] override=False' -> 'AnimA: ParentVariant/MiddleQ#1/Child#1/ActorB#2[Animator] override=False'
+[PASS] Variant: binding table changed lines=2 expected=2
+[PASS] Child: binding table changed lines=0 expected=0
+  Middle.mods - Middle/Child#1 :: target=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0 path=m_SceneBindings.Array.data[0].value value='' ref=GlobalObjectId_V1-1-19bddb193e5bdf445a87fac68ff3634f-2998404640059480151-0
+  Middle.mods + Middle/Child#1 :: target=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0 path=m_SceneBindings.Array.data[0].value value='' ref=GlobalObjectId_V1-1-19bddb193e5bdf445a87fac68ff3634f-5057967804448055063-0
+
+==== R3b Middle Child#1 AnimA: restore AltActor (SerializedProperty) ====
+after SerializedProperty set: prefabOverride=True value=Middle/AltActor#2 [Animator#0] scene='<preview:Middle>' gid=GlobalObjectId_V1-2-19bddb193e5bdf445a87fac68ff3634f-2998404640059480151-0 (storedInstanceID=48102)
+  Middle line 8: 'AnimA: Middle/Child#1/ActorB#2[Animator] override=True' -> 'AnimA: Middle/AltActor#2[Animator] override=True'
+[PASS] Middle: binding table changed lines=1 expected=1
+  Parent line 8: 'AnimA: Parent/MiddleP#0/Child#1/ActorB#2[Animator] override=False' -> 'AnimA: Parent/MiddleP#0/AltActor#2[Animator] override=False'
+  Parent line 22: 'AnimA: Parent/MiddleQ#1/Child#1/ActorB#2[Animator] override=False' -> 'AnimA: Parent/MiddleQ#1/AltActor#2[Animator] override=False'
+[PASS] Parent: binding table changed lines=2 expected=2
+  Variant line 8: 'AnimA: ParentVariant/MiddleP#0/Child#1/ActorB#2[Animator] override=False' -> 'AnimA: ParentVariant/MiddleP#0/AltActor#2[Animator] override=False'
+  Variant line 22: 'AnimA: ParentVariant/MiddleQ#1/Child#1/ActorB#2[Animator] override=False' -> 'AnimA: ParentVariant/MiddleQ#1/AltActor#2[Animator] override=False'
+[PASS] Variant: binding table changed lines=2 expected=2
+[PASS] Child: binding table changed lines=0 expected=0
+  Middle.mods - Middle/Child#1 :: target=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0 path=m_SceneBindings.Array.data[0].value value='' ref=GlobalObjectId_V1-1-19bddb193e5bdf445a87fac68ff3634f-5057967804448055063-0
+  Middle.mods + Middle/Child#1 :: target=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0 path=m_SceneBindings.Array.data[0].value value='' ref=GlobalObjectId_V1-1-19bddb193e5bdf445a87fac68ff3634f-2998404640059480151-0
+[PASS] R3b state equals state before R3a: Child.table
+[PASS] R3b state equals state before R3a: Child.mods
+[PASS] R3b state equals state before R3a: Middle.table
+[PASS] R3b state equals state before R3a: Middle.mods
+[PASS] R3b state equals state before R3a: Parent.table
+[PASS] R3b state equals state before R3a: Parent.mods
+[PASS] R3b state equals state before R3a: Variant.table
+[PASS] R3b state equals state before R3a: Variant.mods
+
+==== R5 Variant MiddleP/Child#1 Signal (ClearGenericBinding) representation ====
+--- Director ParentVariant/MiddleP#0/Child#1/Director#0 ---
+  gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-1119759369258405706-0
+  isPartOfPrefabAsset=True isPartOfPrefabInstance=True activeInHierarchy=False enabled=True
+  nearestInstanceRoot=ParentVariant/MiddleP#0/Child#1 outermostInstanceRoot=ParentVariant
+  playableAsset=TimelineAsset Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable
+  outputs:
+    [0] stream='AnimA' source=AnimationTrack:AnimA trackFileId=-2273321929586457717 targetType=Animator effective=ParentVariant/MiddleP#0/AltActor#2 [Animator#0] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-3280983240370114172-0
+    [1] stream='AnimB' source=AnimationTrack:AnimB trackFileId=-9134536106038837309 targetType=Animator effective=ParentVariant/MiddleP#0/Child#1/ActorB#2 [Animator#0] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-4766390700006213948-0
+    [2] stream='Activation' source=ActivationTrack:Activation trackFileId=-8422034627355303385 targetType=GameObject effective=NULL
+    [3] stream='Audio' source=AudioTrack:Audio trackFileId=8432001759225154961 targetType=AudioSource effective=ParentVariant/MiddleP#0/Child#1/Speaker#3 [AudioSource#1] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-6065263149141997126-0
+    [4] stream='Signal' source=SignalTrack:Signal trackFileId=-4881871319490253849 targetType=SignalReceiver effective=NULL
+    [5] stream='Control' source=ControlTrack:Control trackFileId=-884031111666704180 targetType=<none> effective=NULL
+    [6] stream='GroupedActivation' source=ActivationTrack:GroupedActivation trackFileId=-7179542809682182732 targetType=GameObject effective=ParentVariant/MiddleP#0/Child#1/ActTarget#4 [GameObject] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-2951917413325861855-0
+  m_SceneBindings: isArray=True arraySize=5 type=vector arrayElementType=DirectorGenericBinding prefabOverride=True sizeOverride=True
+    [0] path=m_SceneBindings.Array.data[0] override=False | key(ObjectReference,PPtr<Object>) override=False = AnimA [AnimationTrack] asset='Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable' gid=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-16173422144123093899-0 (storedInstanceID=47444) | value(ObjectReference,PPtr<Object>) override=False = ParentVariant/MiddleP#0/AltActor#2 [Animator#0] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-3280983240370114172-0 (storedInstanceID=47866)
+    [1] path=m_SceneBindings.Array.data[1] override=False | key(ObjectReference,PPtr<Object>) override=False = AnimB [AnimationTrack] asset='Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable' gid=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-9312207967670714307-0 (storedInstanceID=47446) | value(ObjectReference,PPtr<Object>) override=False = ParentVariant/MiddleP#0/Child#1/ActorB#2 [Animator#0] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-4766390700006213948-0 (storedInstanceID=47924)
+    [2] path=m_SceneBindings.Array.data[2] override=False | key(ObjectReference,PPtr<Object>) override=False = Activation [ActivationTrack] asset='Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable' gid=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-10024709446354248231-0 (storedInstanceID=47448) | value(ObjectReference,PPtr<Object>) override=False = NULL (storedInstanceID=0)
+    [3] path=m_SceneBindings.Array.data[3] override=False | key(ObjectReference,PPtr<Object>) override=False = Audio [AudioTrack] asset='Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable' gid=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-8432001759225154961-0 (storedInstanceID=47450) | value(ObjectReference,PPtr<Object>) override=False = ParentVariant/MiddleP#0/Child#1/Speaker#3 [AudioSource#1] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-6065263149141997126-0 (storedInstanceID=47918)
+    [4] path=m_SceneBindings.Array.data[4] override=True | key(ObjectReference,PPtr<Object>) override=True = GroupedActivation [ActivationTrack] asset='Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable' gid=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-11267201264027368884-0 (storedInstanceID=47458) | value(ObjectReference,PPtr<Object>) override=True = ParentVariant/MiddleP#0/Child#1/ActTarget#4 [GameObject] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-2951917413325861855-0 (storedInstanceID=47872)
+  m_ExposedReferences.m_References: size=1 (ExposedReference, out of v1 scope)
+  GetPropertyModifications: total=15 correspondingSource=Parent/MiddleP#0/Child#1/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0
+    OTHER_TARGET target=Parent/MiddleP#0/Child#0/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-7957625587653371198-0 path=m_SceneBindings.Array.data[0].value value='' objRef=NULL
+    THIS_DIRECTOR target=Parent/MiddleP#0/Child#1/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0 path=m_SceneBindings.Array.size value='5' objRef=NULL
+    THIS_DIRECTOR target=Parent/MiddleP#0/Child#1/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0 path=m_SceneBindings.Array.data[4].key value='' objRef=GroupedActivation [ActivationTrack] asset='Assets/TBGValidation/Generated/r2/Restore/ChildTimeline.playable' gid=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-11267201264027368884-0
+    THIS_DIRECTOR target=Parent/MiddleP#0/Child#1/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0 path=m_SceneBindings.Array.data[4].value value='' objRef=ParentVariant/MiddleP#0/Child#1/ActTarget#4 [GameObject] asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-2951917413325861855-0
+  GetObjectOverrides(includeDefault): director has object override (assetObject=Parent/MiddleP#0/Child#1/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0)
+  source chain (level0 = this context):
+    originalSource=Child/Director#0 [PlayableDirector#0] asset='Assets/TBGValidation/Generated/r2/Restore/Child.prefab' gid=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0
+    L0 asset='Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab' path=ParentVariant/MiddleP#0/Child#1/Director#0 gid=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-1119759369258405706-0
+      AnimA: ParentVariant/MiddleP#0/AltActor#2[Animator] valueOverride=False SAME_AS_SOURCE
+      AnimB: ParentVariant/MiddleP#0/Child#1/ActorB#2[Animator] valueOverride=False SAME_AS_SOURCE
+      Activation: NULL valueOverride=False SAME_AS_SOURCE
+      Audio: ParentVariant/MiddleP#0/Child#1/Speaker#3[AudioSource] valueOverride=False SAME_AS_SOURCE
+      Signal: NULL valueOverride=NO_ENTRY CHANGED_AT_THIS_LEVEL
+      GroupedActivation: ParentVariant/MiddleP#0/Child#1/ActTarget#4[GameObject] valueOverride=True SAME_AS_SOURCE
+    L1 asset='Assets/TBGValidation/Generated/r2/Restore/Parent.prefab' path=Parent/MiddleP#0/Child#1/Director#0 gid=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0
+      AnimA: Parent/MiddleP#0/AltActor#2[Animator] valueOverride=False SAME_AS_SOURCE
+      AnimB: Parent/MiddleP#0/Child#1/ActorB#2[Animator] valueOverride=False SAME_AS_SOURCE
+      Activation: NULL valueOverride=False SAME_AS_SOURCE
+      Audio: Parent/MiddleP#0/Child#1/Speaker#3[AudioSource] valueOverride=False SAME_AS_SOURCE
+      Signal: Parent/MiddleP#0/Child#1/Director#0[SignalReceiver] valueOverride=False SAME_AS_SOURCE
+      GroupedActivation: Parent/MiddleP#0/Child#1/ActTarget#4[GameObject] valueOverride=False SAME_AS_SOURCE
+    L2 asset='Assets/TBGValidation/Generated/r2/Restore/Middle.prefab' path=Middle/Child#1/Director#0 gid=GlobalObjectId_V1-1-19bddb193e5bdf445a87fac68ff3634f-837162429362575713-0
+      AnimA: Middle/AltActor#2[Animator] valueOverride=True CHANGED_AT_THIS_LEVEL(target has no source: defined in this context)
+      AnimB: Middle/Child#1/ActorB#2[Animator] valueOverride=False SAME_AS_SOURCE
+      Activation: NULL valueOverride=True CHANGED_AT_THIS_LEVEL
+      Audio: Middle/Child#1/Speaker#3[AudioSource] valueOverride=False SAME_AS_SOURCE
+      Signal: Middle/Child#1/Director#0[SignalReceiver] valueOverride=False SAME_AS_SOURCE
+      GroupedActivation: Middle/Child#1/ActTarget#4[GameObject] valueOverride=False SAME_AS_SOURCE
+    L3 asset='Assets/TBGValidation/Generated/r2/Restore/Child.prefab' path=Child/Director#0 gid=GlobalObjectId_V1-1-2cd251db6b1b68244bf1a2c4d6246cea-7085082835490173416-0
+      AnimA: Child/ActorA#1[Animator] valueOverride=False BASE
+      AnimB: Child/ActorB#2[Animator] valueOverride=False BASE
+      Activation: Child/ActTarget#4[GameObject] valueOverride=False BASE
+      Audio: Child/Speaker#3[AudioSource] valueOverride=False BASE
+      Signal: Child/Director#0[SignalReceiver] valueOverride=False BASE
+      GroupedActivation: Child/ActTarget#4[GameObject] valueOverride=False BASE
+overridden property: m_SceneBindings.Array (Generic)
+overridden property: m_SceneBindings.Array.size (ArraySize)
+overridden property: m_SceneBindings.Array.data[4] (Generic)
+overridden property: m_SceneBindings.Array.data[4].key (ObjectReference)
+overridden property: m_SceneBindings.Array.data[4].value (ObjectReference)
+
+==== R5 Variant MiddleP/Child#1: RevertPropertyOverride on whole m_SceneBindings (observation only) ====
+before: Signal binding=NULL
+after: Signal binding=ParentVariant/MiddleP#0/Child#1/Director#0[SignalReceiver]
+  Variant line 12: 'Signal: NULL override=NO_ENTRY' -> 'Signal: ParentVariant/MiddleP#0/Child#1/Director#0[SignalReceiver] override=False'
+  Variant line 13: 'GroupedActivation: ParentVariant/MiddleP#0/Child#1/ActTarget#4[GameObject] override=True' -> 'GroupedActivation: ParentVariant/MiddleP#0/Child#1/ActTarget#4[GameObject] override=False'
+[FAIL] Variant: binding table changed lines=2 expected=1
+[PASS] Parent: binding table changed lines=0 expected=0
+[PASS] Middle: binding table changed lines=0 expected=0
+[PASS] Child: binding table changed lines=0 expected=0
+  Variant.mods - ParentVariant :: target=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0 path=m_SceneBindings.Array.data[4].key value='' ref=GlobalObjectId_V1-3-8f2270d9fa037534ab5698e8475547f1-11267201264027368884-0
+  Variant.mods - ParentVariant :: target=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0 path=m_SceneBindings.Array.data[4].value value='' ref=GlobalObjectId_V1-1-d3df97465d9c5f245ac9a1e283844c3a-2951917413325861855-0
+  Variant.mods - ParentVariant :: target=GlobalObjectId_V1-1-fe5f048686e1a354ea6894382b7cff8d-8024159613314093569-0 path=m_SceneBindings.Array.size value='5' ref=<null>
+
+==== R4 SceneA Parent#1/MiddleP/Child#0 Activation: RevertPropertyOverride with Undo, then Undo ====
+director=Parent/MiddleP#0/Child#0/Director#0 binding(before)=SceneOnlyTarget[GameObject]
+prefabOverride(before)=True
+binding(after revert)=Parent/MiddleP#0/Child#0/ActTarget#4[GameObject] sceneDirty=False
+[PASS] scene revert -> inherited ActTarget
+[FAIL] scene marked dirty (user saves normally)
+binding(after undo)=SceneOnlyTarget[GameObject]
+[PASS] undo restores scene override
+[PASS] sibling Parent#0 instance unchanged
+[PASS] R4 (scene not saved): files unchanged (14 files)
+
+==== Summary vs original ====
+Child.table: 0 lines differ from original (expected: R1 + R5 effects only)
+Child.mods: 0 lines differ from original (expected: R1 + R5 effects only)
+Middle.table: 0 lines differ from original (expected: R1 + R5 effects only)
+Middle.mods: 0 lines differ from original (expected: R1 + R5 effects only)
+Parent.table: 1 lines differ from original (expected: R1 + R5 effects only)
+Parent.mods: 2 lines differ from original (expected: R1 + R5 effects only)
+Variant.table: 3 lines differ from original (expected: R1 + R5 effects only)
+Variant.mods: 3 lines differ from original (expected: R1 + R5 effects only)
+
+CHECKS: pass=43 fail=2

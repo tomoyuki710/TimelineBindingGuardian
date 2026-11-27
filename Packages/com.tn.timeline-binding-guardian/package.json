@@ -1,0 +1,17 @@
+{
+  "name": "com.tn.timeline-binding-guardian",
+  "version": "0.1.0",
+  "displayName": "Timeline Binding Guardian",
+  "description": "A Unity Editor tool for automatically monitoring, tracking, and restoring Timeline bindings, with support for nested prefabs and notifications when bindings are lost.",
+  "unity": "6000.3",
+  "unityRelease": "27f2",
+  "dependencies": {
+    "com.unity.timeline": "1.8.13"
+  },
+  "keywords": [
+    "timeline",
+    "binding",
+    "prefab",
+    "editor"
+  ]
+}

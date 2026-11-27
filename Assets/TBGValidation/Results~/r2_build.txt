@@ -1,0 +1,86 @@
+
+==== Build set: Base ====
+Saved prefab Assets/TBGValidation/Generated/r2/Base/Child.prefab: True
+Middle: ChildX name='Child', ChildY name='Child' (same name expected)
+  Middle/ChildY: mod m_SceneBindings.Array.data[0].value value='' ref=Animator:AltActor
+  Middle/ChildY: mod m_SceneBindings.Array.data[2].value value='' ref=null
+Middle/ChildY: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Base/Middle.prefab: True
+  Parent/MiddleQ/Child#0: mod m_SceneBindings.Array.data[3].value value='' ref=null
+Parent/MiddleQ/Child#0: m_SceneBindings modifications=1
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[1].value value='' ref=Animator:ActorB
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[3].value value='' ref=null
+Parent/MiddleQ/Child#1: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Base/Parent.prefab: True
+  Variant/MiddleP/Child#0: mod m_SceneBindings.Array.data[0].value value='' ref=null
+Variant/MiddleP/Child#0: m_SceneBindings modifications=1
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[0].value value='' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.size value='5' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].key value='' ref=ActivationTrack:GroupedActivation
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].value value='' ref=GameObject:ActTarget
+Variant/MiddleP/Child#1: m_SceneBindings modifications=4
+Saved prefab Assets/TBGValidation/Generated/r2/Base/ParentVariant.prefab: True
+Variant asset type: Variant
+  SceneA/Parent#1/MiddleP/Child#0: mod m_SceneBindings.Array.data[2].value value='' ref=GameObject:SceneOnlyTarget
+SceneA/Parent#1/MiddleP/Child#0: m_SceneBindings modifications=1
+Saved scene Assets/TBGValidation/Generated/r2/Base/SceneA.unity: True
+Saved scene Assets/TBGValidation/Generated/r2/Base/SceneB.unity: True
+Build completed.
+
+==== Build set: Mutation ====
+Saved prefab Assets/TBGValidation/Generated/r2/Mutation/Child.prefab: True
+Middle: ChildX name='Child', ChildY name='Child' (same name expected)
+  Middle/ChildY: mod m_SceneBindings.Array.data[0].value value='' ref=Animator:AltActor
+  Middle/ChildY: mod m_SceneBindings.Array.data[2].value value='' ref=null
+Middle/ChildY: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Mutation/Middle.prefab: True
+  Parent/MiddleQ/Child#0: mod m_SceneBindings.Array.data[3].value value='' ref=null
+Parent/MiddleQ/Child#0: m_SceneBindings modifications=1
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[3].value value='' ref=null
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[1].value value='' ref=Animator:ActorB
+Parent/MiddleQ/Child#1: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Mutation/Parent.prefab: True
+  Variant/MiddleP/Child#0: mod m_SceneBindings.Array.data[0].value value='' ref=null
+Variant/MiddleP/Child#0: m_SceneBindings modifications=1
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[0].value value='' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.size value='5' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].key value='' ref=ActivationTrack:GroupedActivation
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].value value='' ref=GameObject:ActTarget
+Variant/MiddleP/Child#1: m_SceneBindings modifications=4
+Saved prefab Assets/TBGValidation/Generated/r2/Mutation/ParentVariant.prefab: True
+Variant asset type: Variant
+  SceneA/Parent#1/MiddleP/Child#0: mod m_SceneBindings.Array.data[2].value value='' ref=GameObject:SceneOnlyTarget
+SceneA/Parent#1/MiddleP/Child#0: m_SceneBindings modifications=1
+Saved scene Assets/TBGValidation/Generated/r2/Mutation/SceneA.unity: True
+Saved scene Assets/TBGValidation/Generated/r2/Mutation/SceneB.unity: True
+Build completed.
+
+==== Build set: Restore ====
+Saved prefab Assets/TBGValidation/Generated/r2/Restore/Child.prefab: True
+Middle: ChildX name='Child', ChildY name='Child' (same name expected)
+  Middle/ChildY: mod m_SceneBindings.Array.data[0].value value='' ref=Animator:AltActor
+  Middle/ChildY: mod m_SceneBindings.Array.data[2].value value='' ref=null
+Middle/ChildY: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Restore/Middle.prefab: True
+  Parent/MiddleQ/Child#0: mod m_SceneBindings.Array.data[3].value value='' ref=null
+Parent/MiddleQ/Child#0: m_SceneBindings modifications=1
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[3].value value='' ref=null
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[1].value value='' ref=Animator:ActorB
+Parent/MiddleQ/Child#1: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Restore/Parent.prefab: True
+  Variant/MiddleP/Child#0: mod m_SceneBindings.Array.data[0].value value='' ref=null
+Variant/MiddleP/Child#0: m_SceneBindings modifications=1
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[0].value value='' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.size value='5' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].key value='' ref=ActivationTrack:GroupedActivation
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].value value='' ref=GameObject:ActTarget
+Variant/MiddleP/Child#1: m_SceneBindings modifications=4
+Saved prefab Assets/TBGValidation/Generated/r2/Restore/ParentVariant.prefab: True
+Variant asset type: Variant
+  SceneA/Parent#1/MiddleP/Child#0: mod m_SceneBindings.Array.data[2].value value='' ref=GameObject:SceneOnlyTarget
+SceneA/Parent#1/MiddleP/Child#0: m_SceneBindings modifications=1
+Saved scene Assets/TBGValidation/Generated/r2/Restore/SceneA.unity: True
+Saved scene Assets/TBGValidation/Generated/r2/Restore/SceneB.unity: True
+Build completed.
+
+CHECKS: pass=0 fail=0

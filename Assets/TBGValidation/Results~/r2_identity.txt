@@ -1,0 +1,53 @@
+
+==== Build set: Identity ====
+Saved prefab Assets/TBGValidation/Generated/r2/Identity/Child.prefab: True
+Middle: ChildX name='Child', ChildY name='Child' (same name expected)
+  Middle/ChildY: mod m_SceneBindings.Array.data[0].value value='' ref=Animator:AltActor
+  Middle/ChildY: mod m_SceneBindings.Array.data[2].value value='' ref=null
+Middle/ChildY: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Identity/Middle.prefab: True
+  Parent/MiddleQ/Child#0: mod m_SceneBindings.Array.data[3].value value='' ref=null
+Parent/MiddleQ/Child#0: m_SceneBindings modifications=1
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[3].value value='' ref=null
+  Parent/MiddleQ/Child#1: mod m_SceneBindings.Array.data[1].value value='' ref=Animator:ActorB
+Parent/MiddleQ/Child#1: m_SceneBindings modifications=2
+Saved prefab Assets/TBGValidation/Generated/r2/Identity/Parent.prefab: True
+  Variant/MiddleP/Child#0: mod m_SceneBindings.Array.data[0].value value='' ref=null
+Variant/MiddleP/Child#0: m_SceneBindings modifications=1
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.size value='5' ref=null
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].key value='' ref=ActivationTrack:GroupedActivation
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[4].value value='' ref=GameObject:ActTarget
+  Variant/MiddleP/Child#1: mod m_SceneBindings.Array.data[0].value value='' ref=null
+Variant/MiddleP/Child#1: m_SceneBindings modifications=4
+Saved prefab Assets/TBGValidation/Generated/r2/Identity/ParentVariant.prefab: True
+Variant asset type: Variant
+  SceneA/Parent#1/MiddleP/Child#0: mod m_SceneBindings.Array.data[2].value value='' ref=GameObject:SceneOnlyTarget
+SceneA/Parent#1/MiddleP/Child#0: m_SceneBindings modifications=1
+Saved scene Assets/TBGValidation/Generated/r2/Identity/SceneA.unity: True
+Saved scene Assets/TBGValidation/Generated/r2/Identity/SceneB.unity: True
+Build completed.
+
+==== I1 Middle: rename Child#1 -> 'Renamed', move it to sibling index 0, deactivate Child#0's Director GameObject ====
+## Assets/TBGValidation/Generated/r2/Identity/Middle.prefab: directors before=2 after=2
+[PASS] Assets/TBGValidation/Generated/r2/Identity/Middle.prefab: same director GlobalObjectIds
+[PASS] Assets/TBGValidation/Generated/r2/Identity/Middle.prefab: bindings keyed by GlobalObjectId unchanged
+## Assets/TBGValidation/Generated/r2/Identity/Parent.prefab: directors before=4 after=4
+[PASS] Assets/TBGValidation/Generated/r2/Identity/Parent.prefab: same director GlobalObjectIds
+[PASS] Assets/TBGValidation/Generated/r2/Identity/Parent.prefab: bindings keyed by GlobalObjectId unchanged
+## Assets/TBGValidation/Generated/r2/Identity/ParentVariant.prefab: directors before=4 after=4
+[PASS] Assets/TBGValidation/Generated/r2/Identity/ParentVariant.prefab: same director GlobalObjectIds
+[PASS] Assets/TBGValidation/Generated/r2/Identity/ParentVariant.prefab: bindings keyed by GlobalObjectId unchanged
+
+==== Paths after change (display only) ====
+Middle/Renamed#0/Director#0 gid=GlobalObjectId_V1-1-9839c432571d4e349a0cd4e5abbf49a1-2530204894589374859-0 activeSelf=True
+Middle/Child#1/Director#0 gid=GlobalObjectId_V1-1-9839c432571d4e349a0cd4e5abbf49a1-25440196986648680-0 activeSelf=False
+Parent/MiddleP#0/Renamed#0/Director#0 gid=GlobalObjectId_V1-1-0497c0afdb3352f408bde222013eb2ab-527800924922374178-0 activeSelf=True
+Parent/MiddleP#0/Child#1/Director#0 gid=GlobalObjectId_V1-1-0497c0afdb3352f408bde222013eb2ab-2599797916630319553-0 activeSelf=False
+Parent/MiddleQ#1/Renamed#0/Director#0 gid=GlobalObjectId_V1-1-0497c0afdb3352f408bde222013eb2ab-5932888281860926064-0 activeSelf=True
+Parent/MiddleQ#1/Child#1/Director#0 gid=GlobalObjectId_V1-1-0497c0afdb3352f408bde222013eb2ab-8147764059143799699-0 activeSelf=False
+ParentVariant/MiddleP#0/Renamed#0/Director#0 gid=GlobalObjectId_V1-1-2e1c57bffba435749be8fb570e3b9cd3-7763400474573786997-0 activeSelf=True
+ParentVariant/MiddleP#0/Child#1/Director#0 gid=GlobalObjectId_V1-1-2e1c57bffba435749be8fb570e3b9cd3-5258609876120250006-0 activeSelf=False
+ParentVariant/MiddleQ#1/Renamed#0/Director#0 gid=GlobalObjectId_V1-1-2e1c57bffba435749be8fb570e3b9cd3-4520446108415741223-0 activeSelf=True
+ParentVariant/MiddleQ#1/Child#1/Director#0 gid=GlobalObjectId_V1-1-2e1c57bffba435749be8fb570e3b9cd3-2160794895604327620-0 activeSelf=False
+
+CHECKS: pass=6 fail=0

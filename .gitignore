@@ -136,3 +136,10 @@ crashlytics-build.properties
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Unity CLI Loop の出力（スクリーンショット等）
+/.uloop/
+
+# Timeline Binding Guardian のテスト素材（テスト実行時に自動生成）
+/[Aa]ssets/TBGTestFixtures/
+/[Aa]ssets/TBGTestFixtures.meta
