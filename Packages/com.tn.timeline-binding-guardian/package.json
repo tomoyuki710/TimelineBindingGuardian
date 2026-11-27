@@ -5,6 +5,12 @@
   "description": "A Unity Editor tool for automatically monitoring, tracking, and restoring Timeline bindings, with support for nested prefabs and notifications when bindings are lost.",
   "unity": "6000.3",
   "unityRelease": "27f2",
+  "license": "MIT",
+  "author": {
+    "name": "Tomoyuki Naito",
+    "url": "https://github.com/tomoyuki710"
+  },
+  "documentationUrl": "https://github.com/tomoyuki710/TimelineBindingGuardian#readme",
   "dependencies": {
     "com.unity.timeline": "1.8.13"
   },
