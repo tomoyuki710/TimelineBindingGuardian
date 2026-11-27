@@ -1,156 +1,162 @@
 # Timeline Binding Guardian
 
-English | [日本語](README.ja.md)
+[English](README.en.md) | 日本語
 
-A Unity Editor tool that watches Timeline bindings (`PlayableDirector` generic bindings), keeps a history of their changes, notifies you when a binding is lost, and helps you restore it safely. It understands nested prefabs and prefab variants: it shows **which level** (scene, prefab, or nested prefab) changed a binding, not only the final value.
+Timeline のバインド（`PlayableDirector` の Generic Binding）を見張る Unity Editor 用のツールです。次のことができます。
 
-It runs in the Editor only. Nothing is added to your builds, and nothing is sent over the network.
+- バインドの変化を履歴に残します。
+- バインドが外れたら通知します。
+- 外れたバインドを安全に復元する手助けをします。
 
-![The Scene Bindings tab: the Activation binding is null because Middle.prefab overrides it](.github/images/scene-bindings_en.png)
+Nested Prefab や Prefab Variant にも対応しています。最終的な値だけでなく、**どの階層**（Scene・Prefab・Nested Prefab）でバインドが変わったかを表示します。
 
-*The binding is empty in the scene, and the window shows that the override in `Middle.prefab` is the cause.*
+Editor の中だけで動きます。ビルドには何も含まれず、ネットワークにも何も送信しません。
 
-## Features
+![Scene のバインドタブ: Middle.prefab の Override によって Activation のバインドが NULL になっている](.github/images/scene-bindings_ja.png)
 
-- **Automatic monitoring**: When you open or save a scene or prefab, the tool checks its Timeline bindings and records the changes. You do not need to start anything by hand.
-- **Notifications**: When a binding that used to be bound becomes empty (null), you get:
-  - a notification in the window,
-  - a warning in the Console,
-  - an icon in the Hierarchy, next to the object and the scene.
-- **Origin of the value**: For each binding, the tool shows the level the value comes from. This can be:
-  - a scene override,
-  - a nested prefab,
-  - a prefab variant,
-  - the original prefab.
-- **History**: Lists every observed change with when it happened, the level where it changed, and the value before and after. You can filter it, for example to show only changes since the last build.
-- **Safe restore**: Restores a lost binding at the level where it was lost. Before you restore, a preview shows exactly what will change:
-  - In a prefab, the restore removes the override that cleared the binding, or sets the binding back to the value it had. A backup of the prefab is made first.
-  - In a scene, the change is made in the open scene and can be undone with Ctrl+Z. The scene is not saved for you.
-- **Pre-build check**: When a build starts, the tool checks the open build scenes and the prefabs they use. It never stops the build.
-- **Build scene scan**: Checks every enabled scene in Build Settings. Closed scenes are opened temporarily, one at a time, and closed again.
-- **Intentional nulls shared with your team**: If a binding is meant to be empty, you can register that level in a shared list. Commit the list and nobody on the team is notified about it.
-- **English / Japanese UI**: By default the language follows your OS language setting. You can also choose it in Settings.
+*Scene ではバインドが空になっていて、原因が `Middle.prefab` の Override であることが分かります。*
 
-## Requirements
+## できること
 
-| | Version |
+- **自動監視**: Scene や Prefab を開いたとき・保存したときに Timeline のバインドを検査し、変化を記録します。手動で何かを始める必要はありません。
+- **通知**: バインドされていたものが空（NULL）になると、次の形で知らせます。
+  - ウィンドウの通知
+  - Console への警告
+  - Hierarchy のアイコン（オブジェクトの横と Scene の横）
+- **値の出どころ**: バインドごとに、値がどの階層から来ているかを表示します。
+  - Scene の Override
+  - Nested Prefab
+  - Prefab Variant
+  - 元の Prefab
+- **履歴**: 観測した変化をすべて一覧にします。それぞれ、いつ・どの階層で・何から何に変わったかが分かります。前回ビルド以降だけを表示するなど、絞り込みもできます。
+- **安全な復元**: 外れたバインドを、外れた階層で元に戻します。実行前に、何が変わるかをプレビューで確認できます。
+  - Prefab の場合: バインドを消した Override を外すか、元の値を設定し直します。先に Prefab のバックアップを作ります。
+  - Scene の場合: 開いている Scene を変更し、Ctrl+Z で取り消せます。Scene の保存はしません。
+- **ビルド前検査**: ビルドの開始時に、開いている Build Scene と、それらが使う Prefab を検査します。ビルドは止めません。
+- **Build Scene の一括検査**: Build Settings で有効な Scene をすべて検査します。閉じている Scene は 1 つずつ一時的に開き、検査後に閉じます。
+- **意図的な NULL をチームで共有**: わざと空にしているバインドは、その階層を共有リストに登録できます。リストのファイルをコミットすると、チームの誰の手元でも通知されなくなります。
+- **英語・日本語の表示**: 既定では OS の言語設定に合わせます。Settings で選ぶこともできます。
+
+## 動作環境
+
+| | バージョン |
 |---|---|
-| Unity | 6000.3.27f2 or later in Unity 6000.3 (verified with 6000.3.27f2) |
-| Timeline (`com.unity.timeline`) | 1.8.13 (verified) |
+| Unity | Unity 6000.3 の 6000.3.27f2 以降（6000.3.27f2 で確認済み） |
+| Timeline（`com.unity.timeline`） | 1.8.13（確認済み） |
 
-Other versions have not been tested and are not guaranteed to work.
+上記以外のバージョンは確認しておらず、動作を保証しません。
 
-## Installation
+## 導入方法
 
-1. In the Unity Editor, open **Window > Package Manager**.
-2. Click **+** and choose **Install package from git URL...**.
-3. Enter the following URL and click **Install**:
+1. Unity Editor で **Window > Package Manager** を開きます。
+2. **+** をクリックし、**Install package from git URL...** を選びます。
+3. 次の URL を入力して **Install** をクリックします。
 
    ```
    https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian
    ```
 
-   To pin a specific version (recommended), add the tag at the end:
+   バージョンを固定する場合（推奨）は、末尾にタグを付けます。
 
    ```
    https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.0
    ```
 
-4. After Unity finishes compiling, open **Window > Timeline Binding Guardian**.
+4. Unity のコンパイルが終わったら、**Window > Timeline Binding Guardian** を開きます。
 
-Installing the package does not change any of your scenes or prefabs.
+導入しても、既存の Scene や Prefab は変更しません。
 
-Git must be installed for Unity to install a package from a Git URL.
+Git URL からパッケージを入れるには、PC に Git がインストールされている必要があります。
 
-### Updating and removing
+### 更新と削除
 
-- **Update**: In Package Manager, select **Timeline Binding Guardian** and click **Update**. If you installed it with a tag, install it again with the new tag instead.
-- **Remove**: In Package Manager, select **Timeline Binding Guardian** and click **Remove**.
-  - The history stays in `UserSettings/TimelineBindingGuardian/`. Delete that folder if you do not need it.
-  - If your team uses the intentional-null list, it is also left in `ProjectSettings/Packages/com.tn.timeline-binding-guardian/`.
+- **更新**: Package Manager で **Timeline Binding Guardian** を選び、**Update** をクリックします。タグ付きの URL で導入した場合は、新しいタグの URL で導入し直してください。
+- **削除**: Package Manager で **Timeline Binding Guardian** を選び、**Remove** をクリックします。
+  - 履歴は `UserSettings/TimelineBindingGuardian/` に残ります。不要なら削除してください。
+  - チームで意図的な NULL の一覧を使っていた場合、それも `ProjectSettings/Packages/com.tn.timeline-binding-guardian/` に残ります。
 
-## Getting started
+## 使い方
 
-1. Open **Window > Timeline Binding Guardian**.
-2. The open, saved scenes and the prefabs they use are checked automatically. The first check is saved as the starting point.
-   - Bindings that are already empty at this point are **not** reported. The tool can only tell that a binding was lost if it has seen it bound before.
-3. Work as usual. When a binding is lost and the scene or prefab is saved, it appears in the **Notifications** tab.
+1. **Window > Timeline Binding Guardian** を開きます。
+2. 開いている保存済みの Scene と、それらが使う Prefab を自動で検査します。最初の検査結果が、以後の比較の基準になります。
+   - この時点ですでに空のバインドは**通知しません**。以前にバインドされていたのを見ていないと、外れたことが分からないためです。
+3. いつもどおり作業します。バインドが外れて Scene や Prefab を保存すると、**通知** タブに表示されます。
 
-   ![The Notifications tab with a lost binding selected](.github/images/notifications_en.png)
+   ![外れたバインドを選んだ通知タブ](.github/images/notifications_ja.png)
 
-   A warning icon also appears in the Hierarchy, next to the affected objects and the scene. Click it to show or dismiss the notifications.
+   Hierarchy でも、影響を受けたオブジェクトと Scene の横に警告アイコンが出ます。クリックすると、通知の表示や消去ができます。
 
-   ![Warning icons in the Hierarchy](.github/images/hierarchy.png)
+   ![Hierarchy の警告アイコン](.github/images/hierarchy.png)
 
-### The window
+### ウィンドウ
 
-| Tab | What it shows |
+| タブ | 内容 |
 |---|---|
-| **Notifications** | Bindings that were lost. Select one to see which level changed it, then use **Restore Preview…** or **Dismiss**. |
-| **Scene Bindings** | The current bindings of the open scenes, level by level (scene, nested prefabs, original prefab). |
-| **History** | All recorded changes, with filters for the period (including "Since last build") and the target. |
-| **Settings** | Monitoring, Hierarchy icons, Console warnings, the pre-build check, language, excluded folders, and the intentional-null list. |
+| **通知** | 外れたバインドの一覧です。選ぶと、どの階層で変わったかが分かります。**復元のプレビュー…** や **消去** ができます。 |
+| **Scene のバインド** | 開いている Scene の現在のバインドを、階層ごと（Scene・Nested Prefab・元の Prefab）に表示します。 |
+| **履歴** | 記録した変化のすべてです。期間（「前回ビルド以降」など）や対象で絞り込めます。 |
+| **設定** | 自動監視、Hierarchy アイコン、Console への警告、ビルド前検査、言語、除外するフォルダー、意図的な NULL の一覧を設定します。 |
 
-Use **Scan Now** to check the open scenes right away. Use **Scan Build Scenes…** to check every scene in Build Settings.
+開いている Scene をすぐ検査したいときは **今すぐ検査** を使います。Build Settings のすべての Scene を検査したいときは **Build Scene を検査…** を使います。
 
 <details>
-<summary>History tab</summary>
+<summary>履歴タブ</summary>
 
-![The History tab](.github/images/history_en.png)
+![履歴タブ](.github/images/history_ja.png)
 
 </details>
 
 <details>
-<summary>Settings tab</summary>
+<summary>設定タブ</summary>
 
-![The Settings tab](.github/images/settings_en.png)
+![設定タブ](.github/images/settings_ja.png)
 
 </details>
 
-### Restoring a binding
+### バインドの復元
 
-1. Select the notification and click **Restore Preview…**. In **History**, select the change and click **Restore to before this change…**.
-2. A preview window shows:
-   - the level that will be changed,
-   - the current value,
-   - the value it will be restored to.
+1. 通知を選び、**復元のプレビュー…** をクリックします。**履歴** からは、変化を選んで **この変化の前に復元…** をクリックします。
+2. プレビューのウィンドウに次の内容が表示されます。
+   - 変更する階層
+   - 現在の値
+   - 復元後の値
 
-   ![The restore preview window](.github/images/restore_en.png)
+   ![復元のプレビューのウィンドウ](.github/images/restore_ja.png)
 
-3. Click **Restore…** (or **Remove Override…** when removing the override is enough), then click **Restore** in the confirmation.
-   - **Prefab**: The prefab is saved. A backup is written first to `UserSettings/TimelineBindingGuardian/backups/`. Prefab saves cannot be undone with Ctrl+Z, so use **Undo this restore** instead.
-   - **Scene**: The scene is marked as modified but not saved. Undo with Ctrl+Z.
+3. **復元…**（Override を外すだけで戻る場合は **Override を外す…**）をクリックし、確認で **復元** をクリックすると実行します。
+   - **Prefab の場合**: Prefab を保存します。保存の前に、`UserSettings/TimelineBindingGuardian/backups/` にバックアップを書き出します。Prefab の保存は Ctrl+Z では戻せないため、取り消すときは **この復元を取り消す** を使います。
+   - **Scene の場合**: Scene を変更済みの状態にします（保存はしません）。Ctrl+Z で取り消せます。
 
-### Intentional nulls (shared with the team)
+### 意図的な NULL（チームで共有）
 
-Sometimes a binding is cleared on purpose, for example in a parent prefab. Dismissing a notification only hides it on your machine, so your teammates are still notified after they pull the change. To stop that:
+親の Prefab などで、わざとバインドを空にすることがあります。通知の **消去** は自分の PC にしか保存されないため、変更を Pull した他のメンバーには通知が出ます。これを止めるには、次のようにします。
 
-1. Click **Mark as Intentional Null…** on the notification, or on the level row in **Scene Bindings**.
-2. The level is added to `ProjectSettings/Packages/com.tn.timeline-binding-guardian/IntentionalNullBindings.json`.
-3. Commit that file. From then on, nobody on the team is notified when that level becomes null.
+1. 通知、または **Scene のバインド** の階層の行で、**意図的な NULL として登録…** をクリックします。
+2. その階層が `ProjectSettings/Packages/com.tn.timeline-binding-guardian/IntentionalNullBindings.json` に追加されます。
+3. このファイルをコミットします。以後、その階層が NULL になっても、チームの誰の手元でも通知しません。
 
-The change is still recorded in the history. You can remove a registration in **Settings**.
+変化は履歴には記録されます。登録は **設定** から外せます。
 
-## Where data is stored
+## データの保存場所
 
-| Data | Location | Version control |
+| データ | 場所 | バージョン管理 |
 |---|---|---|
-| History, notification states, settings | `UserSettings/TimelineBindingGuardian/` | Normally not committed (stays on your machine) |
-| Backups made before restoring a prefab | `UserSettings/TimelineBindingGuardian/backups/` | Normally not committed (not deleted automatically) |
-| Intentional-null list | `ProjectSettings/Packages/com.tn.timeline-binding-guardian/IntentionalNullBindings.json` | Commit it to share with the team |
+| 履歴・通知の状態・設定 | `UserSettings/TimelineBindingGuardian/` | 通常はコミットしません（各自の PC に残ります） |
+| Prefab を復元する前のバックアップ | `UserSettings/TimelineBindingGuardian/backups/` | 通常はコミットしません（自動では削除しません） |
+| 意図的な NULL の一覧 | `ProjectSettings/Packages/com.tn.timeline-binding-guardian/IntentionalNullBindings.json` | チームで共有するならコミットします |
 
-Nothing is stored inside the package itself.
+パッケージの中には何も保存しません。
 
-## Limitations
+## 制約
 
-- **No history from before the first check.** A binding that was already empty when the tool first saw it is not reported.
-- **Not every moment is recorded.** Monitoring is based on opening and saving scenes and prefabs. If a binding is changed and changed back before saving, the tool does not see it.
-- **Unsaved scenes are not recorded.** They have no stable ID until they are saved.
-- **Intentional nulls are notified by default.** The tool cannot tell whether a null was intended. Register it in the intentional-null list if it was.
-- **Only `PlayableDirector` generic bindings are covered.** `ExposedReference` fields in clips are not.
-- **Some cases cannot be restored automatically.** For example, the object that was bound may have been deleted, or the prefab may be read-only. In those cases the tool tells you why and you fix it by hand.
-- **Only the versions listed under [Requirements](#requirements) have been verified.**
+- **最初の検査より前の履歴は分かりません。** 最初に見たときにすでに空だったバインドは通知しません。
+- **すべての瞬間を記録するわけではありません。** 監視は Scene や Prefab を開いたとき・保存したときに行います。保存する前に変更して元に戻した場合は検知しません。
+- **未保存の Scene は記録しません。** 保存するまで、安定した ID がないためです。
+- **意図的な NULL も、そのままでは通知されます。** NULL が意図したものかどうかは、ツールには判断できません。意図したものなら、意図的な NULL の一覧に登録してください。
+- **対象は `PlayableDirector` の Generic Binding だけです。** クリップの `ExposedReference` は対象外です。
+- **自動で復元できない場合があります。** 例えば、バインドされていたオブジェクトが削除された場合や、Prefab が読み取り専用の場合です。そのときは理由を表示するので、手動で直してください。
+- **確認済みなのは [動作環境](#動作環境) のバージョンだけです。**
 
-## License
+## ライセンス
 
 [MIT License](LICENSE)
