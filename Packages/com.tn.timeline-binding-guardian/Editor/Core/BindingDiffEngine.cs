@@ -494,7 +494,7 @@ namespace TimelineBindingGuardian
 
         private static AssetLocator CreateScopeLocator(ScopeObservation observation)
         {
-            return new AssetLocator(observation.ScopeGuid, observation.ScopePathHint, AssetKind.Scene);
+            return new AssetLocator(observation.ScopeGuid, observation.ScopePathHint, observation.ScopeKind);
         }
 
         private static DirectorLocator EmptyDirector()

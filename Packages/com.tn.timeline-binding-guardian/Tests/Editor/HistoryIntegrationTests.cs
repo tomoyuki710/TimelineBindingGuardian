@@ -103,6 +103,53 @@ namespace TimelineBindingGuardian
         }
 
         [Test]
+        public void PrefabScope_FirstRecord_IsInitialOnly()
+        {
+            GuardianHistory history = CreateHistory();
+
+            RecordSummary summary = history.Record(new[] { new SceneBindingScanner().ScanPrefabAsset(TestFixtureBuilder.MiddlePath) }, "test");
+
+            Assert.That(summary.Saved, Is.True, summary.Error);
+            ChangeEvent initial = summary.NewEvents.Single();
+            Assert.That(initial.ChangeType, Is.EqualTo(ChangeType.Initial));
+            Assert.That(initial.Owner.AssetKind, Is.EqualTo(AssetKind.Prefab));
+            Assert.That(summary.NewNotifications, Is.Empty);
+        }
+
+        [Test]
+        public void PrefabRecordedBeforeScene_SharesOwnerLevels_NoExtraEvents()
+        {
+            GuardianHistory history = CreateHistory();
+            history.Record(new[] { new SceneBindingScanner().ScanPrefabAsset(TestFixtureBuilder.MiddlePath) }, "test");
+            int ownerLevelsFromMiddle = history.Store.State.OwnerLevels.Count;
+
+            RecordSummary scene = history.Record(ScanScene(TestFixtureBuilder.SceneAPath), "test");
+            RecordSummary middleAgain = history.Record(new[] { new SceneBindingScanner().ScanPrefabAsset(TestFixtureBuilder.MiddlePath) }, "test");
+
+            // Middle.prefab の Director の階層キーは、Scene から見ても同じ（Owner 階層の記録が共有される）
+            Assert.That(scene.NewEvents.Select(e => e.ChangeType), Is.EqualTo(new[] { ChangeType.Initial }));
+            Assert.That(middleAgain.NewEventCount, Is.EqualTo(0));
+            List<string> keys = history.Store.State.OwnerLevels.Select(o => o.OwnerLevelKey).ToList();
+            Assert.That(keys.Distinct().Count(), Is.EqualTo(keys.Count));
+            Assert.That(keys.Count, Is.GreaterThan(ownerLevelsFromMiddle));
+        }
+
+        [Test]
+        public void DependencyIndex_FindsScopesUsingAPrefab()
+        {
+            GuardianHistory history = CreateHistory();
+            history.Record(ScanScene(TestFixtureBuilder.SceneAPath), "test");
+            history.Record(ScanScene(TestFixtureBuilder.SceneBPath), "test");
+            history.Record(new[] { new SceneBindingScanner().ScanPrefabAsset(TestFixtureBuilder.ParentPath) }, "test");
+            history.Record(new[] { new SceneBindingScanner().ScanPrefabAsset(TestFixtureBuilder.MiddlePath) }, "test");
+            DependencyIndex.Invalidate();
+
+            List<string> dependents = DependencyIndex.GetDependentScopePaths(TestFixtureBuilder.MiddlePath, history.Store.State.Scopes);
+
+            Assert.That(dependents, Is.EquivalentTo(new[] { TestFixtureBuilder.SceneAPath, TestFixtureBuilder.SceneBPath, TestFixtureBuilder.ParentPath }));
+        }
+
+        [Test]
         public void Converter_ClassifiesContributionsPerLevel()
         {
             ScanResult scan = ScanScene(TestFixtureBuilder.SceneBPath)[0];

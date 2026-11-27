@@ -26,6 +26,7 @@ namespace TimelineBindingGuardian
     public sealed class HistoryChangeSet
     {
         public bool WriteAll { get; set; }
+        public bool NotificationsChanged { get; set; }
         public HashSet<string> ScopeGuids { get; } = new HashSet<string>();
         public HashSet<string> OwnerGuids { get; } = new HashSet<string>();
         public HashSet<string> EventIds { get; } = new HashSet<string>();
@@ -63,6 +64,8 @@ namespace TimelineBindingGuardian
         private const string ContextsKind = "contexts";
         private const string OwnersKind = "owners";
         private const string EventsKind = "events";
+        private const string NotificationsKind = "notifications";
+        private const string NotificationsId = "all";
         private const string PartitionExtension = ".json.gz";
         private const string BackupExtension = ".bak";
         private const int LegacySchemaVersion = 1;
@@ -70,6 +73,9 @@ namespace TimelineBindingGuardian
         private readonly string _projectGuid;
         private readonly Dictionary<string, long> _partitionGenerations = new Dictionary<string, long>();
         private readonly HashSet<string> _needsRepair = new HashSet<string>();
+        // 読み込み済みの区画（contexts / owners は必要になるまで読まない）
+        private readonly HashSet<string> _loadedPartitions = new HashSet<string>();
+        private StringPool _pool = new StringPool();
         private long _generation;
 
         public HistoryStore(string directory, string projectGuid)
@@ -98,6 +104,8 @@ namespace TimelineBindingGuardian
             Status = HistoryStoreStatus.Ready;
             _partitionGenerations.Clear();
             _needsRepair.Clear();
+            _loadedPartitions.Clear();
+            _pool = new StringPool();
             _generation = 0;
             State = new HistoryState(_projectGuid);
 
@@ -131,12 +139,15 @@ namespace TimelineBindingGuardian
             Dictionary<string, long> generations = new Dictionary<string, long>(_partitionGenerations);
             long bytes = 0;
             int files = 0;
+            List<string> writtenKeys = new List<string>();
             try
             {
+                EnsureChangedPartitionsWereLoaded(changes);
                 RepairPartitions();
                 foreach (KeyValuePair<string, string> partition in WritePartitions(state, changes, next))
                 {
                     generations[partition.Key] = next;
+                    writtenKeys.Add(partition.Key);
                     bytes += new FileInfo(partition.Value).Length;
                     files++;
                 }
@@ -158,9 +169,32 @@ namespace TimelineBindingGuardian
             }
 
             State = state;
+            _loadedPartitions.UnionWith(writtenKeys);
             LastCommitBytes = bytes;
             LastCommitFileCount = files;
             return true;
+        }
+
+        /// <summary>
+        /// 保存済みなのに読み込んでいない区画を書き直すと、ファイル上の内容を空で上書きしてしまうため拒否する（呼び出し側の不備の検出）。
+        /// </summary>
+        private void EnsureChangedPartitionsWereLoaded(HistoryChangeSet changes)
+        {
+            IEnumerable<string> keys = changes.ScopeGuids.Select(s => GetPartitionKey(ContextsKind, s))
+                .Concat(changes.OwnerGuids.Select(o => GetPartitionKey(OwnersKind, o)));
+            if (changes.WriteAll)
+            {
+                keys = _partitionGenerations.Keys;
+            }
+
+            foreach (string key in keys)
+            {
+                bool saved = _partitionGenerations.ContainsKey(key);
+                if (saved && !_loadedPartitions.Contains(key))
+                {
+                    throw new InvalidOperationException($"History partition '{key}' must be loaded before it is rewritten.");
+                }
+            }
         }
 
         /// <summary>
@@ -210,56 +244,136 @@ namespace TimelineBindingGuardian
                 return;
             }
 
-            HistoryState state = new HistoryState(_projectGuid);
-            state.Scopes.AddRange(manifest.Scopes ?? new List<ScopeRecord>());
-            foreach (PartitionEntry entry in manifest.Partitions.OrderBy(e => e.Kind, StringComparer.Ordinal).ThenBy(e => e.Id, StringComparer.Ordinal))
+            State.Scopes.AddRange(manifest.Scopes ?? new List<ScopeRecord>());
+            foreach (PartitionEntry entry in manifest.Partitions)
             {
-                if (!TryLoadPartition(state, entry))
-                {
-                    return;
-                }
-
                 _partitionGenerations[GetPartitionKey(entry.Kind, entry.Id)] = entry.Generation;
             }
 
-            state.InternStrings(new StringPool());
-            State = state;
             _generation = manifest.Generation;
+
+            // イベントと通知は一覧表示・通知判定に常に必要なので読む。文脈と Owner の記録は必要になったときに読む（起動を速くするため）
+            foreach (PartitionEntry entry in manifest.Partitions.OrderBy(e => e.Id, StringComparer.Ordinal))
+            {
+                bool isEager = entry.Kind == EventsKind || entry.Kind == NotificationsKind;
+                if (isEager && !TryLoadPartition(entry.Kind, entry.Id))
+                {
+                    return;
+                }
+            }
         }
 
-        private bool TryLoadPartition(HistoryState state, PartitionEntry entry)
+        /// <summary>
+        /// その Scope（Scene / Prefab）の文脈を読み込む（未読み込みの場合のみ）。読めなければ読み取り専用のエラー状態にして false。
+        /// </summary>
+        public bool EnsureScopeLoaded(string scopeGuid)
         {
-            string path = GetPartitionPath(entry.Kind, entry.Id);
-            string json = ReadPartitionJson(path, entry.Generation, out bool fromBackup);
+            return EnsurePartitionLoaded(ContextsKind, scopeGuid);
+        }
+
+        /// <summary>
+        /// 指定した Owner（Prefab / Scene）の階層の記録を読み込む（未読み込みの場合のみ）。
+        /// </summary>
+        public bool EnsureOwnersLoaded(IEnumerable<string> ownerGuids)
+        {
+            foreach (string owner in ownerGuids.Distinct())
+            {
+                if (!EnsurePartitionLoaded(OwnersKind, owner))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// すべての区画を読み込む（テスト・エクスポート用）。
+        /// </summary>
+        public bool EnsureAllLoaded()
+        {
+            foreach (string key in _partitionGenerations.Keys.ToList())
+            {
+                PartitionEntry entry = SplitPartitionKey(key, 0);
+                if (!EnsurePartitionLoaded(entry.Kind, entry.Id))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public bool IsPartitionLoaded(string kind, string id)
+        {
+            return _loadedPartitions.Contains(GetPartitionKey(kind, id));
+        }
+
+        private bool EnsurePartitionLoaded(string kind, string id)
+        {
+            if (!IsWritable)
+            {
+                return false;
+            }
+
+            string key = GetPartitionKey(kind, id);
+            bool known = _partitionGenerations.ContainsKey(key);
+            if (!known || _loadedPartitions.Contains(key))
+            {
+                // manifest に無い区画はまだ保存されたことが無い（空）
+                return true;
+            }
+
+            return TryLoadPartition(kind, id);
+        }
+
+        private bool TryLoadPartition(string kind, string id)
+        {
+            string key = GetPartitionKey(kind, id);
+            long expected = _partitionGenerations[key];
+            string json = ReadPartitionJson(GetPartitionPath(kind, id), expected, out bool fromBackup);
             if (json == null)
             {
-                SetError(HistoryStoreStatus.Corrupted, $"The history partition '{entry.Kind}/{entry.Id}' is missing or does not match the manifest (generation {entry.Generation}).");
+                SetError(HistoryStoreStatus.Corrupted, $"The history partition '{kind}/{id}' is missing or does not match the manifest (generation {expected}).");
                 return false;
             }
 
             if (fromBackup)
             {
                 // 書き込み途中で中断した区画。次の書き込み前に .bak から本体へ戻す
-                _needsRepair.Add(GetPartitionKey(entry.Kind, entry.Id));
+                _needsRepair.Add(key);
             }
 
-            switch (entry.Kind)
+            HistoryState loaded = new HistoryState(_projectGuid);
+            switch (kind)
             {
                 case ContextsKind:
-                    state.Contexts.AddRange(JsonUtility.FromJson<ContextsPartition>(json).Contexts);
-                    return true;
+                    loaded.Contexts.AddRange(JsonUtility.FromJson<ContextsPartition>(json).Contexts);
+                    break;
                 case OwnersKind:
-                    state.OwnerLevels.AddRange(JsonUtility.FromJson<OwnersPartition>(json).Records);
-                    return true;
+                    loaded.OwnerLevels.AddRange(JsonUtility.FromJson<OwnersPartition>(json).Records);
+                    break;
                 case EventsKind:
                     EventsPartition events = JsonUtility.FromJson<EventsPartition>(json);
-                    state.Events.AddRange(events.Events);
-                    state.Observations.AddRange(events.Observations);
-                    return true;
+                    loaded.Events.AddRange(events.Events);
+                    loaded.Observations.AddRange(events.Observations);
+                    break;
+                case NotificationsKind:
+                    loaded.Notifications.AddRange(JsonUtility.FromJson<NotificationsPartition>(json).Notifications);
+                    break;
                 default:
-                    SetError(HistoryStoreStatus.UnsupportedSchema, $"Unknown history partition kind '{entry.Kind}'.");
+                    SetError(HistoryStoreStatus.UnsupportedSchema, $"Unknown history partition kind '{kind}'.");
                     return false;
             }
+
+            loaded.InternStrings(_pool);
+            State.Contexts.AddRange(loaded.Contexts);
+            State.OwnerLevels.AddRange(loaded.OwnerLevels);
+            State.Events.AddRange(loaded.Events);
+            State.Observations.AddRange(loaded.Observations);
+            State.Notifications.AddRange(loaded.Notifications);
+            _loadedPartitions.Add(key);
+            return true;
         }
 
         /// <summary>
@@ -351,6 +465,13 @@ namespace TimelineBindingGuardian
                 List<ObservationRecord> observations = state.Observations.Where(o => GetMonth(o.ObservedAtUtc) == month).ToList();
                 EventsPartition partition = new EventsPartition(generation, month, events, observations);
                 written.Add(WritePartition(EventsKind, month, JsonUtility.ToJson(partition)));
+            }
+
+            bool writeNotifications = changes.WriteAll || changes.NotificationsChanged;
+            if (writeNotifications)
+            {
+                NotificationsPartition partition = new NotificationsPartition(generation, state.Notifications);
+                written.Add(WritePartition(NotificationsKind, NotificationsId, JsonUtility.ToJson(partition)));
             }
 
             return written;
@@ -659,6 +780,21 @@ namespace TimelineBindingGuardian
             }
 
             public List<OwnerLevelRecord> Records => records ?? new List<OwnerLevelRecord>();
+        }
+
+        [Serializable]
+        private sealed class NotificationsPartition
+        {
+            [SerializeField] private long generation;
+            [SerializeField] private List<NotificationRecord> notifications;
+
+            public NotificationsPartition(long generation, List<NotificationRecord> notifications)
+            {
+                this.generation = generation;
+                this.notifications = notifications;
+            }
+
+            public List<NotificationRecord> Notifications => notifications ?? new List<NotificationRecord>();
         }
 
         [Serializable]

@@ -20,6 +20,13 @@ namespace TimelineBindingGuardian
         [TearDown]
         public void TearDown()
         {
+            // Prefab Mode を開くだけで変更扱いになり、閉じるときに自動保存されてテスト素材が書き換わる（再インポートが起きる）のを防ぐ
+            PrefabStage stage = PrefabStageUtility.GetCurrentPrefabStage();
+            if (stage != null)
+            {
+                stage.ClearDirtiness();
+            }
+
             StageUtility.GoToMainStage();
         }
 

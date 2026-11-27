@@ -54,33 +54,71 @@ namespace TimelineBindingGuardian
         private DateTime _lastScanLocal;
         private int _nextId;
 
+        private enum Tab
+        {
+            Notifications,
+            SceneBindings,
+            History,
+            Settings,
+        }
+
+        private Label _headerLabel;
         private Label _statusLabel;
         private TreeView _treeView;
         private ScrollView _details;
         private VisualElement _bindingsTab;
         private HistoryView _historyView;
-        private ToolbarToggle _bindingsTabToggle;
-        private ToolbarToggle _historyTabToggle;
+        private NotificationsView _notificationsView;
+        private SettingsView _settingsView;
+        private readonly Dictionary<Tab, ToolbarToggle> _tabToggles = new Dictionary<Tab, ToolbarToggle>();
+        private Tab _currentTab = Tab.Notifications;
         private string _lastRecordMessage = string.Empty;
+        private bool _subscribed;
 
         [MenuItem("Window/Timeline/Timeline Binding Guardian")]
         private static void Open()
         {
+            GetOrCreateWindow();
+        }
+
+        /// <summary>
+        /// 指定したイベントの通知だけを表示した状態でウィンドウを開く（Hierarchy アイコンから）。
+        /// </summary>
+        public static void ShowNotificationsFor(IEnumerable<string> eventIds, string label)
+        {
+            GuardianWindow window = GetOrCreateWindow();
+            window.ShowTab(Tab.Notifications);
+            window._notificationsView.ShowEvents(eventIds, label);
+        }
+
+        private static GuardianWindow GetOrCreateWindow()
+        {
             GuardianWindow window = GetWindow<GuardianWindow>();
             window.titleContent = new GUIContent("Binding Guardian");
             window.minSize = new Vector2(720, 360);
+            return window;
         }
 
         private void CreateGUI()
         {
             rootVisualElement.Add(CreateToolbar());
 
-            _statusLabel = new Label("Press \"Scan Now\" to inspect Timeline bindings in the scene.");
+            _headerLabel = new Label();
+            _headerLabel.style.paddingLeft = 6;
+            _headerLabel.style.paddingTop = 2;
+            _headerLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            rootVisualElement.Add(_headerLabel);
+
+            _statusLabel = new Label("Scenes and prefabs are checked automatically when saved, imported, or opened. Press \"Scan Now\" to inspect the open scene.");
             _statusLabel.style.paddingLeft = 6;
             _statusLabel.style.paddingTop = 2;
             _statusLabel.style.paddingBottom = 2;
+            _statusLabel.style.whiteSpace = WhiteSpace.Normal;
             rootVisualElement.Add(_statusLabel);
             rootVisualElement.Add(CreateTabBar());
+
+            _notificationsView = new NotificationsView();
+            rootVisualElement.Add(_notificationsView.Root);
 
             _bindingsTab = new TwoPaneSplitView(0, 340, TwoPaneSplitViewOrientation.Horizontal);
             _bindingsTab.style.flexGrow = 1;
@@ -94,47 +132,154 @@ namespace TimelineBindingGuardian
             _historyView = new HistoryView();
             rootVisualElement.Add(_historyView.Root);
 
+            _settingsView = new SettingsView();
+            rootVisualElement.Add(_settingsView.Root);
+
             ShowDetailsPlaceholder();
-            ShowTab(false);
+            ShowTab(_currentTab);
+            Subscribe();
+            // 待機中の自動検査の件数などを表示し続ける（件数を数えるだけで検査はしない）
+            rootVisualElement.schedule.Execute(UpdateHeader).Every(1000);
+        }
+
+        private void OnDisable()
+        {
+            Unsubscribe();
+        }
+
+        private void Subscribe()
+        {
+            if (_subscribed)
+            {
+                return;
+            }
+
+            GuardianHistory.Changed += OnHistoryChanged;
+            GuardianSettings.Changed += OnSettingsChanged;
+            ScanScheduler.Processed += OnAutoScanProcessed;
+            _subscribed = true;
+        }
+
+        private void Unsubscribe()
+        {
+            GuardianHistory.Changed -= OnHistoryChanged;
+            GuardianSettings.Changed -= OnSettingsChanged;
+            ScanScheduler.Processed -= OnAutoScanProcessed;
+            _subscribed = false;
+        }
+
+        private void OnHistoryChanged()
+        {
+            RefreshCurrentTab();
+            UpdateHeader();
+        }
+
+        private void OnSettingsChanged()
+        {
+            RefreshCurrentTab();
+            UpdateHeader();
+        }
+
+        /// <summary>
+        /// 自動検査された Scene が Scene Bindings に表示中なら、その結果に置き換える。
+        /// </summary>
+        private void OnAutoScanProcessed(ScanResult result, RecordSummary summary)
+        {
+            int index = _results.FindIndex(r => r.Owner.AssetGuid == result.Owner.AssetGuid);
+            if (index < 0)
+            {
+                return;
+            }
+
+            _results[index] = result;
+            RebuildTree();
+            ShowDetailsPlaceholder();
+        }
+
+        private void UpdateHeader()
+        {
+            if (_headerLabel == null)
+            {
+                return;
+            }
+
+            GuardianHistory history = GuardianHistory.Shared;
+            List<(NotificationRecord Notification, ChangeEvent Event)> unread = history.GetNotifications(false);
+            Func<string, LevelValue> current = history.CreateCurrentValueLookup();
+            int stillUnbound = unread.Count(n => !NotificationRules.IsResolved(n.Event, current));
+            string monitoring = GuardianSettings.Instance.MonitoringEnabled ? "on" : "OFF";
+            string pending = ScanScheduler.PendingCount > 0
+                ? $"{ScanScheduler.PendingCount} pending{(string.IsNullOrEmpty(ScanScheduler.DeferReason) ? string.Empty : $" ({ScanScheduler.DeferReason})")}"
+                : "none pending";
+            string last = ScanScheduler.LastProcessedLocal == default ? "-" : ScanScheduler.LastProcessedLocal.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+            _headerLabel.text = $"Unread notifications: {unread.Count} (still unbound: {stillUnbound})   |   Automatic monitoring: {monitoring}, {pending}, last automatic scan {last}";
+            _headerLabel.style.color = unread.Count > 0 ? new StyleColor(AttentionColor) : new StyleColor(StyleKeyword.Null);
+            if (!history.Store.IsWritable)
+            {
+                _headerLabel.text += $"   |   History is read-only: {history.Store.ErrorMessage}";
+            }
         }
 
         private VisualElement CreateTabBar()
         {
             Toolbar tabs = new Toolbar();
-            _bindingsTabToggle = new ToolbarToggle { text = "Scene Bindings" };
-            _bindingsTabToggle.RegisterValueChangedCallback(OnBindingsTabChanged);
-            _historyTabToggle = new ToolbarToggle { text = "History" };
-            _historyTabToggle.RegisterValueChangedCallback(OnHistoryTabChanged);
-            tabs.Add(_bindingsTabToggle);
-            tabs.Add(_historyTabToggle);
+            AddTabToggle(tabs, Tab.Notifications, "Notifications");
+            AddTabToggle(tabs, Tab.SceneBindings, "Scene Bindings");
+            AddTabToggle(tabs, Tab.History, "History");
+            AddTabToggle(tabs, Tab.Settings, "Settings");
             return tabs;
         }
 
-        private void OnBindingsTabChanged(ChangeEvent<bool> changeEvent)
+        private void AddTabToggle(Toolbar tabs, Tab tab, string text)
+        {
+            ToolbarToggle toggle = new ToolbarToggle { text = text };
+            toggle.RegisterValueChangedCallback(changeEvent => OnTabToggled(tab, changeEvent));
+            _tabToggles[tab] = toggle;
+            tabs.Add(toggle);
+        }
+
+        private void OnTabToggled(Tab tab, ChangeEvent<bool> changeEvent)
         {
             if (changeEvent.newValue)
             {
-                ShowTab(false);
+                ShowTab(tab);
+            }
+            else
+            {
+                // 選択中のタブを押しても選択を外さない
+                _tabToggles[tab].SetValueWithoutNotify(true);
             }
         }
 
-        private void OnHistoryTabChanged(ChangeEvent<bool> changeEvent)
+        private void ShowTab(Tab tab)
         {
-            if (changeEvent.newValue)
+            _currentTab = tab;
+            foreach (KeyValuePair<Tab, ToolbarToggle> pair in _tabToggles)
             {
-                ShowTab(true);
+                pair.Value.SetValueWithoutNotify(pair.Key == tab);
             }
+
+            _notificationsView.Root.style.display = tab == Tab.Notifications ? DisplayStyle.Flex : DisplayStyle.None;
+            _bindingsTab.style.display = tab == Tab.SceneBindings ? DisplayStyle.Flex : DisplayStyle.None;
+            _historyView.Root.style.display = tab == Tab.History ? DisplayStyle.Flex : DisplayStyle.None;
+            _settingsView.Root.style.display = tab == Tab.Settings ? DisplayStyle.Flex : DisplayStyle.None;
+            RefreshCurrentTab();
+            UpdateHeader();
         }
 
-        private void ShowTab(bool showHistory)
+        private void RefreshCurrentTab()
         {
-            _bindingsTabToggle.SetValueWithoutNotify(!showHistory);
-            _historyTabToggle.SetValueWithoutNotify(showHistory);
-            _bindingsTab.style.display = showHistory ? DisplayStyle.None : DisplayStyle.Flex;
-            _historyView.Root.style.display = showHistory ? DisplayStyle.Flex : DisplayStyle.None;
-            if (showHistory)
+            switch (_currentTab)
             {
-                _historyView.Refresh();
+                case Tab.Notifications:
+                    _notificationsView.Refresh();
+                    break;
+                case Tab.History:
+                    _historyView.Refresh();
+                    break;
+                case Tab.Settings:
+                    _settingsView.Refresh();
+                    break;
             }
         }
 
@@ -153,7 +298,7 @@ namespace TimelineBindingGuardian
             spacer.style.flexGrow = 1;
             toolbar.Add(spacer);
 
-            Label phaseNote = new Label("Each scan is recorded to the local history. Notifications are not available yet.");
+            Label phaseNote = new Label("Observations are recorded to the local history. Saved states only.");
             phaseNote.style.color = MutedColor;
             phaseNote.style.unityTextAlign = TextAnchor.MiddleRight;
             toolbar.Add(phaseNote);
@@ -252,7 +397,7 @@ namespace TimelineBindingGuardian
             UpdateStatus();
             RebuildTree();
             ShowDetailsPlaceholder();
-            _historyView.Refresh();
+            RefreshCurrentTab();
         }
 
         /// <summary>
@@ -261,6 +406,7 @@ namespace TimelineBindingGuardian
         private void RecordHistory()
         {
             RecordSummary summary = GuardianHistory.Shared.Record(_results, "Manual scan");
+            NotificationService.ReportNewNotifications(summary, "Manual scan");
             List<string> parts = new List<string>();
             if (!string.IsNullOrEmpty(summary.Error))
             {
@@ -554,7 +700,7 @@ namespace TimelineBindingGuardian
 
         private void OnShowHistoryClicked(string bindingKey, List<string> ownerLevelKeys, string label)
         {
-            ShowTab(true);
+            ShowTab(Tab.History);
             _historyView.ShowContext(bindingKey, ownerLevelKeys, label);
         }
 

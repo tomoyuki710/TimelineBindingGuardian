@@ -47,10 +47,69 @@ namespace TimelineBindingGuardian
             Assert.That(reloaded.Status, Is.EqualTo(HistoryStoreStatus.Ready));
             Assert.That(reloaded.State.Events.Count, Is.EqualTo(1));
             Assert.That(reloaded.State.Events[0].EventId, Is.EqualTo(store.State.Events[0].EventId));
+            Assert.That(reloaded.State.Scopes.Single().ScopeGuid, Is.EqualTo("sceneA"));
+            Assert.That(reloaded.EnsureAllLoaded(), Is.True);
             Assert.That(reloaded.State.Contexts.Count, Is.EqualTo(1));
             Assert.That(reloaded.State.OwnerLevels.Count, Is.EqualTo(1));
-            Assert.That(reloaded.State.Scopes.Single().ScopeGuid, Is.EqualTo("sceneA"));
             Assert.That(File.Exists(Path.Combine(_directory, "contexts", "sceneA.json.gz")), Is.True);
+        }
+
+        [Test]
+        public void Load_ReadsOnlyEventsAndNotifications_ContextsAndOwnersOnDemand()
+        {
+            HistoryStore store = CreateStore();
+            Record(store, "sceneA", "target");
+            Record(store, "sceneB", "target");
+
+            HistoryStore reloaded = CreateStore();
+
+            Assert.That(reloaded.State.Events.Count, Is.EqualTo(2));
+            Assert.That(reloaded.State.Contexts, Is.Empty);
+            Assert.That(reloaded.State.OwnerLevels, Is.Empty);
+
+            Assert.That(reloaded.EnsureScopeLoaded("sceneA"), Is.True);
+            Assert.That(reloaded.State.Contexts.Select(c => c.ScopeGuid), Is.EqualTo(new[] { "sceneA" }));
+            Assert.That(reloaded.IsPartitionLoaded("contexts", "sceneB"), Is.False);
+
+            // 読み込んだ Scope だけを記録し直しても、読み込んでいない Scope の区画は書き直さない
+            long sceneBGeneration = ReadPartitionGeneration("contexts", "sceneB");
+            Record(reloaded, "sceneA", "otherTarget");
+            Assert.That(ReadPartitionGeneration("contexts", "sceneB"), Is.EqualTo(sceneBGeneration));
+        }
+
+        [Test]
+        public void RewritingUnloadedPartition_IsRejected()
+        {
+            HistoryStore store = CreateStore();
+            Record(store, "sceneA", "target");
+            HistoryStore reloaded = CreateStore();
+            HistoryChangeSet changes = new HistoryChangeSet();
+            changes.ScopeGuids.Add("sceneA");
+
+            bool committed = reloaded.TryCommit(reloaded.State, changes, out string error);
+
+            Assert.That(committed, Is.False);
+            Assert.That(error, Does.Contain("must be loaded"));
+            Assert.That(CreateStore().EnsureAllLoaded(), Is.True);
+        }
+
+        [Test]
+        public void Notifications_ArePersistedSeparately()
+        {
+            HistoryStore store = CreateStore();
+            Record(store, "sceneA", "target");
+            DiffResult lost = RecordValue(store, "sceneA", new LevelValue(ValueState.Null, LocalState.DefinedHere, string.Empty, string.Empty, string.Empty));
+            List<NotificationRecord> created = NotificationRules.CreateForNewEvents(store.State, lost.NewEvents, "2026-11-27T00:00:00Z");
+            Assert.That(store.TryCommit(store.State, new HistoryChangeSet { NotificationsChanged = true }, out string error), Is.True, error);
+
+            HistoryStore reloaded = CreateStore();
+            Assert.That(NotificationRules.GetUnread(reloaded.State).Select(n => n.EventId), Is.EqualTo(created.Select(n => n.EventId)));
+
+            NotificationRules.Dismiss(reloaded.State, created.Select(n => n.EventId), "2026-11-27T00:00:01Z");
+            reloaded.TryCommit(reloaded.State, new HistoryChangeSet { NotificationsChanged = true }, out error);
+
+            Assert.That(NotificationRules.GetUnread(CreateStore().State), Is.Empty);
+            Assert.That(File.Exists(Path.Combine(_directory, "notifications", "all.json.gz")), Is.True);
         }
 
         [Test]
@@ -140,10 +199,17 @@ namespace TimelineBindingGuardian
             File.WriteAllText(partition, "broken");
             File.WriteAllText(partition + ".bak", "broken");
 
+            // 文脈の区画は遅延読み込みなので、読もうとした時点で検出し、読み取り専用になる
             HistoryStore reloaded = CreateStore();
+            Assert.That(reloaded.Status, Is.EqualTo(HistoryStoreStatus.Ready));
 
+            bool loaded = reloaded.EnsureScopeLoaded("sceneA");
+
+            Assert.That(loaded, Is.False);
             Assert.That(reloaded.Status, Is.EqualTo(HistoryStoreStatus.Corrupted));
+            Assert.That(reloaded.IsWritable, Is.False);
             Assert.That(reloaded.ErrorMessage, Does.Contain("contexts/sceneA"));
+            Assert.That(File.ReadAllText(partition), Is.EqualTo("broken"));
         }
 
         [Test]
@@ -175,7 +241,7 @@ namespace TimelineBindingGuardian
         public void LegacyStateJson_IsMigratedAndKept()
         {
             HistoryState legacy = new HistoryState("project");
-            BindingDiffEngine.Apply(legacy, Observation("sceneA", "target"));
+            BindingDiffEngine.Apply(legacy, Observation("sceneA", new LevelValue(ValueState.Bound, LocalState.DefinedHere, "target", "target", "Animator")));
             string json = JsonUtility.ToJson(legacy).Replace("\"schemaVersion\":2", "\"schemaVersion\":1");
             Directory.CreateDirectory(_directory);
             File.WriteAllText(Path.Combine(_directory, HistoryStore.LegacyFileName), json);
@@ -187,7 +253,9 @@ namespace TimelineBindingGuardian
             Assert.That(File.Exists(Path.Combine(_directory, HistoryStore.ManifestFileName)), Is.True);
             Assert.That(File.Exists(Path.Combine(_directory, HistoryStore.LegacyFileName)), Is.False);
             Assert.That(File.Exists(Path.Combine(_directory, HistoryStore.MigratedLegacyFileName)), Is.True);
-            Assert.That(CreateStore().State.Contexts.Count, Is.EqualTo(1));
+            HistoryStore again = CreateStore();
+            Assert.That(again.EnsureAllLoaded(), Is.True);
+            Assert.That(again.State.Contexts.Count, Is.EqualTo(1));
         }
 
         [Test]
@@ -207,7 +275,9 @@ namespace TimelineBindingGuardian
             HistoryStore store = CreateStore();
             Record(store, "sceneA", "target");
 
-            HistoryState state = CreateStore().State;
+            HistoryStore reloaded = CreateStore();
+            reloaded.EnsureAllLoaded();
+            HistoryState state = reloaded.State;
 
             // 別々の区画から読んだ同じ内容の文字列が、同じインスタンスにまとめられている
             ContextSnapshot context = state.Contexts.Single();
@@ -239,16 +309,36 @@ namespace TimelineBindingGuardian
             long smallMs = watch.ElapsedMilliseconds;
             long smallBytes = store.LastCommitBytes;
 
+            // 起動時（遅延読み込み: イベントと通知だけ）
             watch.Restart();
             HistoryStore reloaded = CreateStore();
-            long loadMs = watch.ElapsedMilliseconds;
+            long startupLoadMs = watch.ElapsedMilliseconds;
 
-            string report = $"[TBG scale] 10,000 bindings: record+save {bigMs} ms, wrote {bigBytes / 1024.0:0.0} KB in {store.LastCommitFileCount} file(s) | " +
-                $"next small scene: {smallMs} ms, wrote {smallBytes / 1024.0:0.0} KB | load all: {loadMs} ms | total on disk {store.GetTotalSizeBytes() / 1024.0:0.0} KB";
+            // 再起動後に大きな Scene を記録し直す（自動検査で起きる処理: 必要区画の読み込み＋差分＋保存）
+            watch.Restart();
+            ScopeObservation again = LargeObservation("bigScene", 10000, 50);
+            reloaded.EnsureScopeLoaded("bigScene");
+            reloaded.EnsureOwnersLoaded(again.Contexts.SelectMany(c => c.Levels).Select(l => l.Owner.AssetGuid));
+            DiffResult rerecord = BindingDiffEngine.Apply(reloaded.State, again);
+            HistoryChangeSet rerecordChanges = new HistoryChangeSet();
+            rerecordChanges.Add(rerecord);
+            Assert.That(reloaded.TryCommit(reloaded.State, rerecordChanges, out error), Is.True, error);
+            long rerecordMs = watch.ElapsedMilliseconds;
+
+            watch.Restart();
+            HistoryStore full = CreateStore();
+            full.EnsureAllLoaded();
+            long fullLoadMs = watch.ElapsedMilliseconds;
+
+            string report = $"[TBG scale] 10,000 bindings: first record+save {bigMs} ms, wrote {bigBytes / 1024.0:0.0} KB | " +
+                $"next small scene {smallMs} ms, wrote {smallBytes / 1024.0:0.0} KB | startup load (lazy) {startupLoadMs} ms | " +
+                $"re-record big scene after restart {rerecordMs} ms ({rerecord.NewEvents.Count} new events) | load everything {fullLoadMs} ms | " +
+                $"total on disk {store.GetTotalSizeBytes() / 1024.0:0.0} KB";
             UnityEngine.Debug.Log(report);
             TestContext.WriteLine(report);
 
-            Assert.That(reloaded.State.Contexts.Count, Is.EqualTo(10010));
+            Assert.That(full.State.Contexts.Count, Is.EqualTo(10010));
+            Assert.That(rerecord.NewEvents, Is.Empty);
             Assert.That(smallBytes, Is.LessThan(bigBytes / 10));
         }
 
@@ -261,8 +351,17 @@ namespace TimelineBindingGuardian
 
         private DiffResult Record(HistoryStore store, string scope, string target)
         {
+            return RecordValue(store, scope, new LevelValue(ValueState.Bound, LocalState.DefinedHere, target, target, "Animator"));
+        }
+
+        /// <summary>
+        /// 製品の GuardianHistory と同じく、記録の前にその Scope と Owner の区画を読み込んでから差分を取り保存する。
+        /// </summary>
+        private DiffResult RecordValue(HistoryStore store, string scope, LevelValue value)
+        {
+            Assert.That(store.EnsureScopeLoaded(scope) && store.EnsureOwnersLoaded(new[] { $"owner-{scope}" }), Is.True, store.ErrorMessage);
             HistoryState state = store.State;
-            DiffResult result = BindingDiffEngine.Apply(state, Observation(scope, target));
+            DiffResult result = BindingDiffEngine.Apply(state, Observation(scope, value));
             HistoryChangeSet changes = new HistoryChangeSet();
             changes.Add(result);
             Assert.That(store.TryCommit(state, changes, out string error), Is.True, error);
@@ -281,10 +380,9 @@ namespace TimelineBindingGuardian
             }
         }
 
-        private ScopeObservation Observation(string scope, string target)
+        private ScopeObservation Observation(string scope, LevelValue bound)
         {
             _counter++;
-            LevelValue bound = new LevelValue(ValueState.Bound, LocalState.DefinedHere, target, target, "Animator");
             LevelSnapshot level = new LevelSnapshot($"owner-{scope}|director|timeline|track", new AssetLocator($"owner-{scope}", $"Assets/{scope}.unity", AssetKind.Scene),
                 new DirectorLocator("director", "Director", "Director#0", 0), bound, ContributionKind.Defined);
             ContextSnapshot context = new ContextSnapshot($"key-{scope}", scope, $"Assets/{scope}.unity", new DirectorLocator("director", "Director", "Director#0", 0),

@@ -492,6 +492,7 @@ namespace TimelineBindingGuardian
         [SerializeField] private List<ScopeRecord> scopes = new List<ScopeRecord>();
         [SerializeField] private List<ObservationRecord> observations = new List<ObservationRecord>();
         [SerializeField] private List<ChangeEvent> events = new List<ChangeEvent>();
+        [SerializeField] private List<NotificationRecord> notifications = new List<NotificationRecord>();
 
         public HistoryState(string projectGuid)
         {
@@ -505,6 +506,8 @@ namespace TimelineBindingGuardian
         public List<ScopeRecord> Scopes => scopes;
         public List<ObservationRecord> Observations => observations;
         public List<ChangeEvent> Events => events;
+        // 通知の状態（Phase 3）。v1 からの移行データには無い
+        public List<NotificationRecord> Notifications => notifications ?? (notifications = new List<NotificationRecord>());
 
         /// <summary>
         /// 同じ内容の文字列を 1 インスタンスにまとめる（読み込み後に呼ぶ）。
@@ -538,7 +541,14 @@ namespace TimelineBindingGuardian
     /// </summary>
     public sealed class ScopeObservation
     {
-        public ScopeObservation(string observationId, string observedAtUtc, string reason, string scopeGuid, string scopePathHint, List<ContextSnapshot> contexts)
+        public ScopeObservation(
+            string observationId,
+            string observedAtUtc,
+            string reason,
+            string scopeGuid,
+            string scopePathHint,
+            List<ContextSnapshot> contexts,
+            AssetKind scopeKind = AssetKind.Scene)
         {
             ObservationId = observationId;
             ObservedAtUtc = observedAtUtc;
@@ -546,7 +556,11 @@ namespace TimelineBindingGuardian
             ScopeGuid = scopeGuid;
             ScopePathHint = scopePathHint ?? string.Empty;
             Contexts = contexts ?? new List<ContextSnapshot>();
+            ScopeKind = scopeKind;
         }
+
+        // Scope は Scene または Prefab Asset（Scene を開いていなくても Prefab の変化を記録するため）
+        public AssetKind ScopeKind { get; }
 
         public string ObservationId { get; }
         public string ObservedAtUtc { get; }
