@@ -18,6 +18,15 @@ namespace TimelineBindingGuardian
         }
 
         /// <summary>
+        /// Owner 階層のキー: その階層を所有する Asset/Scene の GUID + その階層の Director の GlobalObjectId + Timeline GUID + Track fileId。
+        /// 同じ Middle.prefab 内の同じ Director の同じ Track は、どの Scene から観測しても同じキーになる。
+        /// </summary>
+        public static string CreateOwnerLevelKey(string ownerGuid, string directorGlobalObjectId, string timelineGuid, string trackFileId)
+        {
+            return string.Concat(ownerGuid, Separator, directorGlobalObjectId, Separator, timelineGuid, Separator, trackFileId);
+        }
+
+        /// <summary>
         /// fileId を符号付き 64bit の文字列にする。GlobalObjectId は unsigned 表示のため、保存時はこちらに統一する。
         /// </summary>
         public static string FormatFileId(long fileId)

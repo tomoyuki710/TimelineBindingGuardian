@@ -57,6 +57,11 @@ namespace TimelineBindingGuardian
         private Label _statusLabel;
         private TreeView _treeView;
         private ScrollView _details;
+        private VisualElement _bindingsTab;
+        private HistoryView _historyView;
+        private ToolbarToggle _bindingsTabToggle;
+        private ToolbarToggle _historyTabToggle;
+        private string _lastRecordMessage = string.Empty;
 
         [MenuItem("Window/Timeline/Timeline Binding Guardian")]
         private static void Open()
@@ -75,17 +80,62 @@ namespace TimelineBindingGuardian
             _statusLabel.style.paddingTop = 2;
             _statusLabel.style.paddingBottom = 2;
             rootVisualElement.Add(_statusLabel);
+            rootVisualElement.Add(CreateTabBar());
 
-            TwoPaneSplitView split = new TwoPaneSplitView(0, 340, TwoPaneSplitViewOrientation.Horizontal);
-            split.style.flexGrow = 1;
-            split.Add(CreateTreePane());
+            _bindingsTab = new TwoPaneSplitView(0, 340, TwoPaneSplitViewOrientation.Horizontal);
+            _bindingsTab.style.flexGrow = 1;
+            _bindingsTab.Add(CreateTreePane());
             _details = new ScrollView();
             _details.style.paddingLeft = 8;
             _details.style.paddingRight = 8;
-            split.Add(_details);
-            rootVisualElement.Add(split);
+            _bindingsTab.Add(_details);
+            rootVisualElement.Add(_bindingsTab);
+
+            _historyView = new HistoryView();
+            rootVisualElement.Add(_historyView.Root);
 
             ShowDetailsPlaceholder();
+            ShowTab(false);
+        }
+
+        private VisualElement CreateTabBar()
+        {
+            Toolbar tabs = new Toolbar();
+            _bindingsTabToggle = new ToolbarToggle { text = "Scene Bindings" };
+            _bindingsTabToggle.RegisterValueChangedCallback(OnBindingsTabChanged);
+            _historyTabToggle = new ToolbarToggle { text = "History" };
+            _historyTabToggle.RegisterValueChangedCallback(OnHistoryTabChanged);
+            tabs.Add(_bindingsTabToggle);
+            tabs.Add(_historyTabToggle);
+            return tabs;
+        }
+
+        private void OnBindingsTabChanged(ChangeEvent<bool> changeEvent)
+        {
+            if (changeEvent.newValue)
+            {
+                ShowTab(false);
+            }
+        }
+
+        private void OnHistoryTabChanged(ChangeEvent<bool> changeEvent)
+        {
+            if (changeEvent.newValue)
+            {
+                ShowTab(true);
+            }
+        }
+
+        private void ShowTab(bool showHistory)
+        {
+            _bindingsTabToggle.SetValueWithoutNotify(!showHistory);
+            _historyTabToggle.SetValueWithoutNotify(showHistory);
+            _bindingsTab.style.display = showHistory ? DisplayStyle.None : DisplayStyle.Flex;
+            _historyView.Root.style.display = showHistory ? DisplayStyle.Flex : DisplayStyle.None;
+            if (showHistory)
+            {
+                _historyView.Refresh();
+            }
         }
 
         private VisualElement CreateToolbar()
@@ -103,7 +153,7 @@ namespace TimelineBindingGuardian
             spacer.style.flexGrow = 1;
             toolbar.Add(spacer);
 
-            Label phaseNote = new Label("Read-only view. Notifications and history are not available yet.");
+            Label phaseNote = new Label("Each scan is recorded to the local history. Notifications are not available yet.");
             phaseNote.style.color = MutedColor;
             phaseNote.style.unityTextAlign = TextAnchor.MiddleRight;
             toolbar.Add(phaseNote);
@@ -198,9 +248,32 @@ namespace TimelineBindingGuardian
             }
 
             _lastScanLocal = DateTime.Now;
+            RecordHistory();
             UpdateStatus();
             RebuildTree();
             ShowDetailsPlaceholder();
+            _historyView.Refresh();
+        }
+
+        /// <summary>
+        /// スキャン結果を履歴に記録する（保存済みの Scene のみ）。
+        /// </summary>
+        private void RecordHistory()
+        {
+            RecordSummary summary = GuardianHistory.Shared.Record(_results, "Manual scan");
+            List<string> parts = new List<string>();
+            if (!string.IsNullOrEmpty(summary.Error))
+            {
+                parts.Add($"History not saved: {summary.Error}");
+            }
+            else if (summary.Saved)
+            {
+                int lost = summary.NewEvents.Count(e => e.ChangeType == ChangeType.BindingLost);
+                parts.Add($"History: {summary.NewEventCount} new event(s), {lost} newly lost");
+            }
+
+            parts.AddRange(summary.SkippedReasons.Select(r => $"Not recorded: {r}"));
+            _lastRecordMessage = string.Join("  |  ", parts);
         }
 
         private void UpdateStatus()
@@ -211,7 +284,8 @@ namespace TimelineBindingGuardian
             int unsavedCount = _results.Count(r => !r.IsSaved);
             string unsaved = unsavedCount > 0 ? $"  |  {unsavedCount} unsaved scene(s): not eligible for history" : string.Empty;
             string time = _lastScanLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-            _statusLabel.text = $"Last scan: {time}  |  {_results.Count} scene(s), {directorCount} director(s), {trackCount} binding(s), {lostCount} currently Null / No Entry{unsaved}";
+            string record = string.IsNullOrEmpty(_lastRecordMessage) ? string.Empty : $"\n{_lastRecordMessage}";
+            _statusLabel.text = $"Last scan: {time}  |  {_results.Count} scene(s), {directorCount} director(s), {trackCount} binding(s), {lostCount} currently Null / No Entry{unsaved}{record}";
         }
 
         private void RebuildTree()
@@ -441,7 +515,46 @@ namespace TimelineBindingGuardian
                 _details.Add(CreateLevelRow(false, track.Levels[i]));
             }
 
+            AddTrackHistory(director, track);
+        }
+
+        private void AddTrackHistory(DirectorObservation director, TrackBindingObservation track)
+        {
+            List<string> ownerLevelKeys = track.Levels
+                .Select(l => BindingIdentity.CreateOwnerLevelKey(l.Owner.AssetGuid, l.Director.GlobalObjectId, track.Track.TimelineGuid, track.Track.TrackFileId))
+                .ToList();
+            List<ChangeEvent> events = HistoryView.FindEventsForContext(GuardianHistory.Shared.Store.State, track.BindingKey, ownerLevelKeys)
+                .Where(e => e.ChangeType != ChangeType.Initial)
+                .ToList();
+
+            _details.Add(CreateHeader("History"));
+            if (events.Count == 0)
+            {
+                _details.Add(CreateMutedLabel("No changes recorded for this binding since the first observation. Bindings that were already broken before the first scan cannot be detected."));
+            }
+            else
+            {
+                ChangeEvent latest = events[0];
+                AffectedContext context = latest.AffectedContexts.FirstOrDefault(c => c.ContextBindingKey == track.BindingKey);
+                string previous = context != null
+                    ? $"Previous effective value: {HistoryView.FormatValue(context.EffectiveBefore)} → {HistoryView.FormatValue(context.EffectiveAfter)}"
+                    : $"Previous value at {System.IO.Path.GetFileName(latest.Owner.AssetPathHint)}: {HistoryView.FormatValue(latest.Before)} → {HistoryView.FormatValue(latest.After)}";
+                _details.Add(new Label($"Last change: {latest.ChangeType} at {System.IO.Path.GetFileName(latest.Owner.AssetPathHint)} (observed {HistoryView.FormatLocalTime(latest.ObservedAtUtc)})"));
+                _details.Add(new Label(previous));
+                _details.Add(new Label($"{events.Count} recorded change(s) related to this binding."));
+            }
+
+            string label = $"{GetLeafName(track.Track.TrackPathHint)} on {director.Director.HierarchyPathHint}";
+            Button showHistory = new Button(() => OnShowHistoryClicked(track.BindingKey, ownerLevelKeys, label)) { text = "Show History" };
+            showHistory.style.alignSelf = Align.FlexStart;
+            _details.Add(showHistory);
             _details.Add(CreateMutedLabel("Times shown are observation times, not when the change was actually made."));
+        }
+
+        private void OnShowHistoryClicked(string bindingKey, List<string> ownerLevelKeys, string label)
+        {
+            ShowTab(true);
+            _historyView.ShowContext(bindingKey, ownerLevelKeys, label);
         }
 
         private VisualElement CreateLevelRow(bool isHeader, LevelBindingState level)

@@ -41,9 +41,16 @@ namespace TimelineBindingGuardian
         public const string TrackKeep = "KeepTrack";
         public const string TrackRemove = "RemoveTrack";
 
+        // 手動の画面確認用（自由に編集してよい）。テストはこのフォルダを使わない
+        public const string PlaygroundFolderName = "Playground";
+
         private const string CompleteMarker = "fixture_complete.txt";
 
-        public static string Folder => $"{Root}/v{Version}";
+        private static string _folderNameOverride;
+
+        public static string Folder => $"{Root}/{FolderName}";
+
+        private static string FolderName => _folderNameOverride ?? $"v{Version}";
         public static string TimelinePath => $"{Folder}/ChildTimeline.playable";
         public static string StaleTimelinePath => $"{Folder}/StaleTimeline.playable";
         public static string ChildPath => $"{Folder}/Child.prefab";
@@ -73,6 +80,30 @@ namespace TimelineBindingGuardian
             AssetDatabase.ImportAsset($"{Folder}/{CompleteMarker}");
         }
 
+        /// <summary>
+        /// 手動確認用の素材を Assets/TBGTestFixtures/Playground/ に生成する（既にあれば何もしない）。生成先のパスを返す。
+        /// </summary>
+        public static string BuildPlayground()
+        {
+            string folder = $"{Root}/{PlaygroundFolderName}";
+            if (AssetDatabase.IsValidFolder(folder))
+            {
+                return folder;
+            }
+
+            _folderNameOverride = PlaygroundFolderName;
+            try
+            {
+                Build();
+            }
+            finally
+            {
+                _folderNameOverride = null;
+            }
+
+            return folder;
+        }
+
         public static TrackAsset FindTrack(string timelinePath, string trackName)
         {
             foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(timelinePath))
@@ -93,7 +124,7 @@ namespace TimelineBindingGuardian
                 AssetDatabase.CreateFolder("Assets", "TBGTestFixtures");
             }
 
-            AssetDatabase.CreateFolder(Root, $"v{Version}");
+            AssetDatabase.CreateFolder(Root, FolderName);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             CreateTimeline();

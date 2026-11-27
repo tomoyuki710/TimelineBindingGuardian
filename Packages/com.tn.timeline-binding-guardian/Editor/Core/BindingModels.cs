@@ -391,16 +391,20 @@ namespace TimelineBindingGuardian
         [SerializeField] private string scannedAtUtc;
         [SerializeField] private List<DirectorObservation> directors;
         [SerializeField] private List<string> diagnostics;
+        [SerializeField] private bool hasUnsavedChanges;
 
-        public ScanResult(AssetLocator owner, string scannedAtUtc, List<DirectorObservation> directors, List<string> diagnostics)
+        public ScanResult(AssetLocator owner, string scannedAtUtc, List<DirectorObservation> directors, List<string> diagnostics, bool hasUnsavedChanges = false)
         {
             this.owner = owner;
             this.scannedAtUtc = scannedAtUtc ?? string.Empty;
             this.directors = directors ?? new List<DirectorObservation>();
             this.diagnostics = diagnostics ?? new List<string>();
+            this.hasUnsavedChanges = hasUnsavedChanges;
         }
 
         public AssetLocator Owner => owner;
+        // スキャン時に Scene に未保存の変更があった（保存済み状態ではないので履歴に記録しない）
+        public bool HasUnsavedChanges => hasUnsavedChanges;
         // 安定 ID を持たない未保存 Scene は永続履歴の対象外（Phase 2 以降）
         public bool IsSaved => owner != null && owner.IsSaved;
         public string ScannedAtUtc => scannedAtUtc;

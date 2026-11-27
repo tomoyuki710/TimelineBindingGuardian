@@ -52,7 +52,12 @@ namespace TimelineBindingGuardian
                 }
             }
 
-            return new ScanResult(owner, GetUtcNow(), directors, diagnostics);
+            if (scene.isDirty)
+            {
+                diagnostics.Add("Scene has unsaved changes. History records saved states only, so this scan is not recorded.");
+            }
+
+            return new ScanResult(owner, GetUtcNow(), directors, diagnostics, scene.isDirty);
         }
 
         /// <summary>
