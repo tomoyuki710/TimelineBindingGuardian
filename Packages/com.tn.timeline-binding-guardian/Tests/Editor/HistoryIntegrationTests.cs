@@ -84,7 +84,7 @@ namespace TimelineBindingGuardian
             Assert.That(summary.Saved, Is.False);
             Assert.That(summary.RecordedScopeCount, Is.EqualTo(0));
             Assert.That(summary.SkippedReasons.Single(), Does.Contain("unsaved changes"));
-            Assert.That(File.Exists(history.Store.FilePath), Is.False);
+            Assert.That(File.Exists(history.Store.ManifestPath), Is.False);
 
             // 変更を破棄して開き直す（フィクスチャを保存しない）
             EditorSceneManager.OpenScene(TestFixtureBuilder.SceneAPath, OpenSceneMode.Single);

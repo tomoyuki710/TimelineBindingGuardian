@@ -75,10 +75,10 @@ namespace TimelineBindingGuardian
         {
             GuardianHistory history = GuardianHistory.Shared;
             HistoryStore store = history.Store;
-            string size = (store.GetFileSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
+            string size = (store.GetTotalSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
             _storeLabel.text = store.IsWritable
-                ? $"History file: {store.FilePath} ({size} KB, {store.State.Events.Count} event(s), local only)"
-                : $"History is read-only ({store.Status}): {store.ErrorMessage}  File: {store.FilePath}";
+                ? $"History folder: {store.Directory} ({size} KB on disk, {store.State.Events.Count} event(s), local only)"
+                : $"History is read-only ({store.Status}): {store.ErrorMessage}  Folder: {store.Directory}";
             _storeLabel.style.color = store.IsWritable ? new StyleColor(MutedColor) : new StyleColor(AttentionColor);
 
             _visibleEvents.Clear();

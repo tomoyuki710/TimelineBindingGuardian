@@ -79,6 +79,13 @@ namespace TimelineBindingGuardian
         {
             return valueState == ValueState.Bound ? $"{targetHint} [{targetType}]" : valueState.ToString();
         }
+
+        internal void Intern(StringPool pool)
+        {
+            targetGlobalObjectId = pool.Intern(targetGlobalObjectId);
+            targetHint = pool.Intern(targetHint);
+            targetType = pool.Intern(targetType);
+        }
     }
 
     [Serializable]
@@ -118,6 +125,14 @@ namespace TimelineBindingGuardian
             }
 
             return contribution != ContributionKind.Defined || value.HasSameValue(other.value);
+        }
+
+        internal void Intern(StringPool pool)
+        {
+            ownerLevelKey = pool.Intern(ownerLevelKey);
+            owner.Intern(pool);
+            director.Intern(pool);
+            value.Intern(pool);
         }
     }
 
@@ -218,6 +233,22 @@ namespace TimelineBindingGuardian
             return new AssetLocator(owner.AssetGuid, string.Empty, owner.AssetKind);
         }
 
+        internal void Intern(StringPool pool)
+        {
+            bindingKey = pool.Intern(bindingKey);
+            scopeGuid = pool.Intern(scopeGuid);
+            scopePathHint = pool.Intern(scopePathHint);
+            observationId = pool.Intern(observationId);
+            observedAtUtc = pool.Intern(observedAtUtc);
+            director.Intern(pool);
+            track.Intern(pool);
+            effective.Intern(pool);
+            foreach (LevelSnapshot level in levels)
+            {
+                level.Intern(pool);
+            }
+        }
+
         public LevelSnapshot FindLevel(string key)
         {
             foreach (LevelSnapshot level in levels)
@@ -249,6 +280,13 @@ namespace TimelineBindingGuardian
         public string OwnerLevelKey => ownerLevelKey;
         public LevelSnapshot Level => level;
         public string ObservedAtUtc => observedAtUtc;
+
+        internal void Intern(StringPool pool)
+        {
+            ownerLevelKey = pool.Intern(ownerLevelKey);
+            observedAtUtc = pool.Intern(observedAtUtc);
+            level.Intern(pool);
+        }
     }
 
     [Serializable]
@@ -281,6 +319,16 @@ namespace TimelineBindingGuardian
         public LevelValue EffectiveBefore => effectiveBefore;
         public LevelValue EffectiveAfter => effectiveAfter;
         public string Note => note;
+
+        internal void Intern(StringPool pool)
+        {
+            contextBindingKey = pool.Intern(contextBindingKey);
+            scopePathHint = pool.Intern(scopePathHint);
+            directorPathHint = pool.Intern(directorPathHint);
+            directorIndexPathHint = pool.Intern(directorIndexPathHint);
+            effectiveBefore.Intern(pool);
+            effectiveAfter.Intern(pool);
+        }
     }
 
     [Serializable]
@@ -355,6 +403,22 @@ namespace TimelineBindingGuardian
             affectedContexts.Add(context);
             affectsEffective = true;
         }
+
+        internal void Intern(StringPool pool)
+        {
+            observationId = pool.Intern(observationId);
+            observedAtUtc = pool.Intern(observedAtUtc);
+            ownerLevelKey = pool.Intern(ownerLevelKey);
+            owner.Intern(pool);
+            director.Intern(pool);
+            track.Intern(pool);
+            before.Intern(pool);
+            after.Intern(pool);
+            foreach (AffectedContext context in affectedContexts)
+            {
+                context.Intern(pool);
+            }
+        }
     }
 
     [Serializable]
@@ -411,13 +475,15 @@ namespace TimelineBindingGuardian
     }
 
     /// <summary>
-    /// state.json の内容。最新の確実な観測値（contexts / ownerLevels）、変更履歴（events）、観測記録を持つ。
+    /// 履歴の全体（メモリ上）。最新の確実な観測値（contexts / ownerLevels）、変更履歴（events）、観測記録を持つ。
+    /// 保存時は HistoryStore が Scene・Owner・月ごとの区画に分けて書き出す。
     /// 通知状態（Unread / Dismissed）は Phase 3 で追加する。
     /// </summary>
     [Serializable]
     public sealed class HistoryState
     {
-        public const int CurrentSchemaVersion = 1;
+        // 1: 単一の state.json、2: manifest と区画ファイル（gzip）
+        public const int CurrentSchemaVersion = 2;
 
         [SerializeField] private int schemaVersion = CurrentSchemaVersion;
         [SerializeField] private string projectGuid = string.Empty;
@@ -439,6 +505,27 @@ namespace TimelineBindingGuardian
         public List<ScopeRecord> Scopes => scopes;
         public List<ObservationRecord> Observations => observations;
         public List<ChangeEvent> Events => events;
+
+        /// <summary>
+        /// 同じ内容の文字列を 1 インスタンスにまとめる（読み込み後に呼ぶ）。
+        /// </summary>
+        public void InternStrings(StringPool pool)
+        {
+            foreach (ContextSnapshot context in contexts)
+            {
+                context.Intern(pool);
+            }
+
+            foreach (OwnerLevelRecord record in ownerLevels)
+            {
+                record.Intern(pool);
+            }
+
+            foreach (ChangeEvent changeEvent in events)
+            {
+                changeEvent.Intern(pool);
+            }
+        }
 
         public HistoryState Clone()
         {

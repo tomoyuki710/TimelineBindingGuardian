@@ -93,6 +93,12 @@ namespace TimelineBindingGuardian
         public AssetKind AssetKind => assetKind;
         public bool IsSaved => !string.IsNullOrEmpty(assetGuid);
 
+        internal void Intern(StringPool pool)
+        {
+            assetGuid = pool.Intern(assetGuid);
+            assetPathHint = pool.Intern(assetPathHint);
+        }
+
         public override string ToString()
         {
             return string.IsNullOrEmpty(assetPathHint) ? "<unsaved>" : assetPathHint;
@@ -121,6 +127,13 @@ namespace TimelineBindingGuardian
         // 表示・デバッグ用（名前#兄弟インデックス）。永続キーには使わない
         public string IndexPathHint => indexPathHint;
         public int ComponentIndexHint => componentIndexHint;
+
+        internal void Intern(StringPool pool)
+        {
+            globalObjectId = pool.Intern(globalObjectId);
+            hierarchyPathHint = pool.Intern(hierarchyPathHint);
+            indexPathHint = pool.Intern(indexPathHint);
+        }
     }
 
     [Serializable]
@@ -150,6 +163,16 @@ namespace TimelineBindingGuardian
         public string TrackType => trackType;
         public string TrackPathHint => trackPathHint;
         public string OutputTargetType => outputTargetType;
+
+        internal void Intern(StringPool pool)
+        {
+            timelineGuid = pool.Intern(timelineGuid);
+            timelinePathHint = pool.Intern(timelinePathHint);
+            trackFileId = pool.Intern(trackFileId);
+            trackType = pool.Intern(trackType);
+            trackPathHint = pool.Intern(trackPathHint);
+            outputTargetType = pool.Intern(outputTargetType);
+        }
     }
 
     [Serializable]

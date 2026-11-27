@@ -19,6 +19,9 @@ namespace TimelineBindingGuardian
         public int UpdatedEventCount { get; set; }
         public List<string> SkippedReasons { get; } = new List<string>();
         public List<ChangeEvent> NewEvents { get; } = new List<ChangeEvent>();
+        // 保存で書き出したバイト数・ファイル数（変化した区画のみ書き直すため、規模に比例しない）
+        public long WrittenBytes { get; set; }
+        public int WrittenFileCount { get; set; }
     }
 
     /// <summary>
@@ -72,16 +75,31 @@ namespace TimelineBindingGuardian
                 return summary;
             }
 
-            HistoryState next = Store.State.Clone();
-            foreach (ScanResult result in results)
+            // 履歴全体を複製すると規模に比例して重くなるため、状態を直接更新し、保存に失敗したらファイルから読み直して戻す
+            HistoryState state = Store.State;
+            HistoryChangeSet changes = new HistoryChangeSet();
+            try
             {
-                if (!TryGetSkipReason(result, out string skipReason))
+                foreach (ScanResult result in results)
                 {
-                    RecordScope(next, result, reason, summary);
-                    continue;
-                }
+                    if (!TryGetSkipReason(result, out string skipReason))
+                    {
+                        RecordScope(state, result, reason, summary, changes);
+                        continue;
+                    }
 
-                summary.SkippedReasons.Add($"{result.Owner}: {skipReason}");
+                    summary.SkippedReasons.Add($"{result.Owner}: {skipReason}");
+                }
+            }
+            catch (Exception exception)
+            {
+                // 途中まで更新された状態を捨て、直前に保存された状態へ戻す
+                Store.Load();
+                summary.Error = $"History could not be updated: {exception.Message}";
+                summary.NewEvents.Clear();
+                summary.NewEventCount = 0;
+                summary.UpdatedEventCount = 0;
+                return summary;
             }
 
             if (summary.RecordedScopeCount == 0)
@@ -89,8 +107,9 @@ namespace TimelineBindingGuardian
                 return summary;
             }
 
-            if (!Store.TryCommit(next, out string error))
+            if (!Store.TryCommit(state, changes, out string error))
             {
+                Store.Load();
                 summary.Error = error;
                 summary.NewEvents.Clear();
                 summary.NewEventCount = 0;
@@ -99,16 +118,19 @@ namespace TimelineBindingGuardian
             }
 
             summary.Saved = true;
+            summary.WrittenBytes = Store.LastCommitBytes;
+            summary.WrittenFileCount = Store.LastCommitFileCount;
             return summary;
         }
 
-        private static void RecordScope(HistoryState state, ScanResult result, string reason, RecordSummary summary)
+        private static void RecordScope(HistoryState state, ScanResult result, string reason, RecordSummary summary, HistoryChangeSet changes)
         {
             string observationId = Guid.NewGuid().ToString("N");
             string observedAtUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             ScopeObservation observation = new ScopeObservation(observationId, observedAtUtc, reason,
                 result.Owner.AssetGuid, result.Owner.AssetPathHint, SnapshotConverter.Convert(result));
             DiffResult diff = BindingDiffEngine.Apply(state, observation);
+            changes.Add(diff);
             summary.RecordedScopeCount++;
             summary.NewEventCount += diff.NewEvents.Count;
             summary.UpdatedEventCount += diff.UpdatedEvents.Count;

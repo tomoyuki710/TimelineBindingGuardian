@@ -9,6 +9,12 @@ namespace TimelineBindingGuardian
         public List<ChangeEvent> NewEvents { get; } = new List<ChangeEvent>();
         // 既存イベントに影響文脈を追加したもの（別 Scene で記録済みの同じ変更など）
         public List<ChangeEvent> UpdatedEvents { get; } = new List<ChangeEvent>();
+
+        // 保存時に書き直す必要がある区画（変化の無い区画は書き直さない）
+        public HashSet<string> ChangedScopeGuids { get; } = new HashSet<string>();
+        public HashSet<string> ChangedOwnerGuids { get; } = new HashSet<string>();
+        public HashSet<string> ChangedEventIds { get; } = new HashSet<string>();
+        public HashSet<string> ChangedObservationIds { get; } = new HashSet<string>();
     }
 
     /// <summary>
@@ -40,6 +46,13 @@ namespace TimelineBindingGuardian
             }
 
             UpdateScopeRecord(state, observation);
+            result.ChangedScopeGuids.Add(observation.ScopeGuid);
+            result.ChangedObservationIds.Add(observation.ObservationId);
+            foreach (ChangeEvent updated in result.UpdatedEvents)
+            {
+                result.ChangedEventIds.Add(updated.EventId);
+            }
+
             state.Observations.Add(new ObservationRecord(
                 observation.ObservationId,
                 observation.ObservedAtUtc,
@@ -105,12 +118,21 @@ namespace TimelineBindingGuardian
                     {
                         recordIndex[level.OwnerLevelKey] = state.OwnerLevels.Count;
                         state.OwnerLevels.Add(current);
+                        result.ChangedOwnerGuids.Add(level.Owner.AssetGuid);
                         continue;
                     }
 
+                    // 定義も値も同じなら記録を書き換えない（その Owner の区画を書き直さないため）
                     LevelSnapshot previous = state.OwnerLevels[index].Level;
+                    bool sameContribution = previous.HasSameContribution(level);
+                    if (sameContribution && previous.Value.HasSameValue(level.Value))
+                    {
+                        continue;
+                    }
+
                     state.OwnerLevels[index] = current;
-                    if (previous.HasSameContribution(level))
+                    result.ChangedOwnerGuids.Add(level.Owner.AssetGuid);
+                    if (sameContribution)
                     {
                         continue;
                     }
@@ -451,6 +473,7 @@ namespace TimelineBindingGuardian
         {
             state.Events.Add(changeEvent);
             result.NewEvents.Add(changeEvent);
+            result.ChangedEventIds.Add(changeEvent.EventId);
         }
 
         private static ChangeEvent CreateEvent(

@@ -269,7 +269,8 @@ namespace TimelineBindingGuardian
             else if (summary.Saved)
             {
                 int lost = summary.NewEvents.Count(e => e.ChangeType == ChangeType.BindingLost);
-                parts.Add($"History: {summary.NewEventCount} new event(s), {lost} newly lost");
+                string written = (summary.WrittenBytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
+                parts.Add($"History: {summary.NewEventCount} new event(s), {lost} newly lost (saved {written} KB in {summary.WrittenFileCount} file(s))");
             }
 
             parts.AddRange(summary.SkippedReasons.Select(r => $"Not recorded: {r}"));
