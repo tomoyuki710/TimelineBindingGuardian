@@ -16,13 +16,14 @@ namespace TimelineBindingGuardian
     /// </summary>
     public sealed class SceneBindingScanner
     {
-        private readonly Dictionary<int, DirectorBindingTable> _tableCache = new Dictionary<int, DirectorBindingTable>();
+        // キャッシュのキーはオブジェクトそのもの（UnityEngine.Object の等価判定は同一オブジェクトかどうか。Instance ID は Unity 6000.4 以降で廃止のため使わない）
+        private readonly Dictionary<PlayableDirector, DirectorBindingTable> _tableCache = new Dictionary<PlayableDirector, DirectorBindingTable>();
         private readonly PrefabOverrideInspector _overrideInspector = new PrefabOverrideInspector();
         // 以下は 1 回の検査の中で同じ値を何度も計算しないためのキャッシュ（Prefab Asset 側の Director やバインド先は、多数の Scene 内 Director で共有される）
-        private readonly Dictionary<int, LevelInfo> _levelInfoCache = new Dictionary<int, LevelInfo>();
-        private readonly Dictionary<int, TargetLocator> _targetCache = new Dictionary<int, TargetLocator>();
-        private readonly Dictionary<int, TimelineInfo> _timelineCache = new Dictionary<int, TimelineInfo>();
-        private readonly Dictionary<(int, int), TrackLocator> _trackCache = new Dictionary<(int, int), TrackLocator>();
+        private readonly Dictionary<PlayableDirector, LevelInfo> _levelInfoCache = new Dictionary<PlayableDirector, LevelInfo>();
+        private readonly Dictionary<Object, TargetLocator> _targetCache = new Dictionary<Object, TargetLocator>();
+        private readonly Dictionary<TimelineAsset, TimelineInfo> _timelineCache = new Dictionary<TimelineAsset, TimelineInfo>();
+        private readonly Dictionary<(TimelineAsset, TrackAsset), TrackLocator> _trackCache = new Dictionary<(TimelineAsset, TrackAsset), TrackLocator>();
 
         public List<ScanResult> ScanLoadedScenes()
         {
@@ -301,11 +302,10 @@ namespace TimelineBindingGuardian
                 return TargetLocator.None;
             }
 
-            int key = entry.Value.GetInstanceID();
-            if (!_targetCache.TryGetValue(key, out TargetLocator target))
+            if (!_targetCache.TryGetValue(entry.Value, out TargetLocator target))
             {
                 target = PrefabContextResolver.CreateTargetLocator(entry.Value);
-                _targetCache.Add(key, target);
+                _targetCache.Add(entry.Value, target);
             }
 
             return target;
@@ -343,14 +343,13 @@ namespace TimelineBindingGuardian
 
         private LevelInfo GetLevelInfo(PlayableDirector director)
         {
-            int key = director.GetInstanceID();
-            if (!_levelInfoCache.TryGetValue(key, out LevelInfo info))
+            if (!_levelInfoCache.TryGetValue(director, out LevelInfo info))
             {
                 info = new LevelInfo(
                     PrefabContextResolver.GetOwner(director),
                     PrefabContextResolver.GetContextKind(director),
                     PrefabContextResolver.CreateDirectorLocator(director));
-                _levelInfoCache.Add(key, info);
+                _levelInfoCache.Add(director, info);
             }
 
             return info;
@@ -358,13 +357,12 @@ namespace TimelineBindingGuardian
 
         private TimelineInfo GetTimelineInfo(TimelineAsset timeline)
         {
-            int key = timeline.GetInstanceID();
-            if (!_timelineCache.TryGetValue(key, out TimelineInfo info))
+            if (!_timelineCache.TryGetValue(timeline, out TimelineInfo info))
             {
                 info = new TimelineInfo(
                     PrefabContextResolver.CreateAssetLocator(AssetDatabase.GetAssetPath(timeline)),
                     new List<TrackAsset>(BindingReader.GetBindableTracks(timeline)));
-                _timelineCache.Add(key, info);
+                _timelineCache.Add(timeline, info);
             }
 
             return info;
@@ -372,7 +370,7 @@ namespace TimelineBindingGuardian
 
         private TrackLocator GetTrackLocator(TimelineAsset timeline, AssetLocator timelineLocator, TrackAsset track)
         {
-            (int, int) key = (timeline.GetInstanceID(), track.GetInstanceID());
+            (TimelineAsset, TrackAsset) key = (timeline, track);
             if (!_trackCache.TryGetValue(key, out TrackLocator locator))
             {
                 locator = CreateTrackLocator(timeline, timelineLocator, track);
@@ -384,12 +382,11 @@ namespace TimelineBindingGuardian
 
         private DirectorBindingTable GetTable(PlayableDirector director)
         {
-            int key = director.GetInstanceID();
-            if (!_tableCache.TryGetValue(key, out DirectorBindingTable table))
+            if (!_tableCache.TryGetValue(director, out DirectorBindingTable table))
             {
                 table = BindingReader.Read(director);
-                // Prefab Asset のオブジェクトは同じスキャン内で共有されるためキャッシュする（Scene 側も同一 ID なら同一オブジェクト）
-                _tableCache.Add(key, table);
+                // Prefab Asset のオブジェクトは同じスキャン内で共有されるためキャッシュする
+                _tableCache.Add(director, table);
             }
 
             return table;

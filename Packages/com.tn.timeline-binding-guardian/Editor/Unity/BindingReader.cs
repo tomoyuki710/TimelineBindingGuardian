@@ -21,7 +21,7 @@ namespace TimelineBindingGuardian
 
         public int Index { get; }
         public Object Value { get; }
-        // 保存された非 NULL 参照が解決できない証拠がある（stored instanceID≠0 かつ値 NULL）
+        // 保存された非 NULL 参照が解決できない証拠がある（保存された参照が空でなく、かつ値が NULL）
         public bool IsMissing { get; }
         public bool ValueOverridden { get; }
     }
@@ -36,7 +36,7 @@ namespace TimelineBindingGuardian
 
         public bool ArrayFound { get; set; }
         public bool SizeOverridden { get; set; }
-        // key が NULL だが stored instanceID≠0（削除された Track の残骸）
+        // key が NULL だが保存された参照は空でない（削除された Track の残骸）
         public int StaleKeyCount { get; set; }
         // key が NULL で証拠もない要素
         public int NullKeyCount { get; set; }
@@ -146,13 +146,13 @@ namespace TimelineBindingGuardian
         private static BindingEntry CreateEntry(int index, SerializedProperty value)
         {
             Object target = value.objectReferenceValue;
-            bool isMissing = target == null && GetStoredInstanceId(value) != 0;
+            bool isMissing = target == null && HasStoredReference(value);
             return new BindingEntry(index, target, isMissing, value.prefabOverride);
         }
 
         private static void CountNullKey(DirectorBindingTable table, SerializedProperty key)
         {
-            if (GetStoredInstanceId(key) != 0)
+            if (HasStoredReference(key))
             {
                 table.StaleKeyCount++;
             }
@@ -162,11 +162,19 @@ namespace TimelineBindingGuardian
             }
         }
 
-        private static int GetStoredInstanceId(SerializedProperty property)
+        /// <summary>
+        /// 参照として何かが保存されているか（値が NULL でも、保存された参照が空でなければ Missing や残骸と分かる）。
+        /// Unity 6000.4 以降は Instance ID が廃止のため EntityId で判定する。
+        /// </summary>
+        private static bool HasStoredReference(SerializedProperty property)
         {
+#if UNITY_6000_4_OR_NEWER
+            return property.objectReferenceEntityIdValue != EntityId.None;
+#else
 #pragma warning disable 618
-            return property.objectReferenceInstanceIDValue;
+            return property.objectReferenceInstanceIDValue != 0;
 #pragma warning restore 618
+#endif
         }
     }
 }

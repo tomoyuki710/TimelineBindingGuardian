@@ -35,10 +35,18 @@ It runs in the Editor only. Nothing is added to your builds, and nothing is sent
 
 | | Version |
 |---|---|
-| Unity | 6000.3.27f2 or later in Unity 6000.3 (verified with 6000.3.27f2) |
-| Timeline (`com.unity.timeline`) | 1.8.13 (verified) |
+| Unity | 6000.0 or later |
+| Timeline (`com.unity.timeline`) | 1.8.13 or later (Unity 6000.6 uses the Timeline 6.6.0 built into Unity) |
 
-Other versions have not been tested and are not guaranteed to work.
+Verified versions:
+
+| Unity | Timeline | Verified by |
+|---|---|---|
+| 6000.0.25f1 | 1.8.13 | Automated tests |
+| 6000.3.27f2 | 1.8.13 | Automated tests and manual use |
+| 6000.6.0f1 | 6.6.0 (built into Unity) | Automated tests |
+
+Unity 6000.4 and 6000.5 are supported based on Unity's official API documentation, but have not been tested. Other versions are not guaranteed to work.
 
 ## Installation
 
@@ -53,7 +61,7 @@ Other versions have not been tested and are not guaranteed to work.
    To pin a specific version (recommended), add the tag at the end:
 
    ```
-   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.0
+   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.1
    ```
 
 4. After Unity finishes compiling, open **Window > Timeline Binding Guardian**.

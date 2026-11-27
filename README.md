@@ -41,10 +41,18 @@ Editor の中だけで動きます。ビルドには何も含まれず、ネッ�
 
 | | バージョン |
 |---|---|
-| Unity | Unity 6000.3 の 6000.3.27f2 以降（6000.3.27f2 で確認済み） |
-| Timeline（`com.unity.timeline`） | 1.8.13（確認済み） |
+| Unity | 6000.0 以降 |
+| Timeline（`com.unity.timeline`） | 1.8.13 以降（Unity 6000.6 では、Unity に組み込まれた Timeline 6.6.0 が使われます） |
 
-上記以外のバージョンは確認しておらず、動作を保証しません。
+確認済みのバージョン:
+
+| Unity | Timeline | 確認内容 |
+|---|---|---|
+| 6000.0.25f1 | 1.8.13 | 自動テスト |
+| 6000.3.27f2 | 1.8.13 | 自動テスト・実際の操作 |
+| 6000.6.0f1 | 6.6.0（Unity に組み込み） | 自動テスト |
+
+Unity 6000.4・6000.5 は、公式の API 情報に基づいて対応していますが、実機では確認していません。上記以外のバージョンは、動作を保証しません。
 
 ## 導入方法
 
@@ -59,7 +67,7 @@ Editor の中だけで動きます。ビルドには何も含まれず、ネッ�
    バージョンを固定する場合（推奨）は、末尾にタグを付けます。
 
    ```
-   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.0
+   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.1
    ```
 
 4. Unity のコンパイルが終わったら、**Window > Timeline Binding Guardian** を開きます。

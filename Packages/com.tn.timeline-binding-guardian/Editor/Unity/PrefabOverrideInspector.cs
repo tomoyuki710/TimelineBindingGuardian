@@ -16,7 +16,8 @@ namespace TimelineBindingGuardian
         private const string ArrayDataPrefix = BindingReader.SceneBindingsProperty + ".Array.data[";
         private const string ArraySizePath = BindingReader.SceneBindingsProperty + ".Array.size";
 
-        private readonly Dictionary<int, PropertyModification[]> _cache = new Dictionary<int, PropertyModification[]>();
+        // キーは最も外側の Prefab インスタンスのルート（オブジェクトそのもの。Instance ID は Unity 6000.4 以降で廃止のため使わない）
+        private readonly Dictionary<GameObject, PropertyModification[]> _cache = new Dictionary<GameObject, PropertyModification[]>();
 
         /// <summary>
         /// director の階層で、sourceDirector（1つ下の階層）に対して記録された m_SceneBindings の Override のうち、
@@ -62,11 +63,10 @@ namespace TimelineBindingGuardian
                 return System.Array.Empty<PropertyModification>();
             }
 
-            int key = outermost.GetInstanceID();
-            if (!_cache.TryGetValue(key, out PropertyModification[] modifications))
+            if (!_cache.TryGetValue(outermost, out PropertyModification[] modifications))
             {
                 modifications = PrefabUtility.GetPropertyModifications(outermost) ?? System.Array.Empty<PropertyModification>();
-                _cache.Add(key, modifications);
+                _cache.Add(outermost, modifications);
             }
 
             return modifications;

@@ -4,6 +4,11 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+#if UNITY_6000_4_OR_NEWER
+using ItemId = UnityEngine.EntityId;
+#else
+using ItemId = System.Int32;
+#endif
 
 namespace TimelineBindingGuardian
 {
@@ -12,7 +17,8 @@ namespace TimelineBindingGuardian
     /// - GUI 描画中は作成済みのキャッシュを引くだけ（検査・オブジェクト解決はしない）。
     /// - 祖先はイベントの集合で数え、同じ通知を重複して数えない（展開していなくても親で分かる）。
     /// - アイコンをクリックすると、その対象の通知だけを表示した状態でウィンドウを開く。
-    /// - Scene の見出し行にも、その Scene 内の通知をまとめて出す（Hierarchy は見出し行でも Scene の handle を渡して呼ぶ）。
+    /// - Scene の見出し行にも、その Scene 内の通知をまとめて出す（Hierarchy は見出し行でも Scene の handle が表す ID を渡して呼ぶ）。
+    /// - 行の ID は Unity 6000.4 以降は EntityId、それより前は Instance ID（HierarchyItemId で扱う）。
     /// </summary>
     [InitializeOnLoad]
     public static class HierarchyIndicator
@@ -21,16 +27,20 @@ namespace TimelineBindingGuardian
         // Scene の見出し行の右端にある Unity 標準の「⋮」メニューボタンを避ける幅
         private const float SceneMenuButtonWidth = 16f;
 
-        // GameObject のインスタンス ID → 関係する未読の通知（eventId）
-        private static readonly Dictionary<int, HashSet<string>> _cache = new Dictionary<int, HashSet<string>>();
-        // Scene の handle → その Scene 内の Director に関係する未読の通知（eventId）。GameObject の ID と混ざらないよう別に持つ
-        private static readonly Dictionary<int, HashSet<string>> _sceneCache = new Dictionary<int, HashSet<string>>();
+        // GameObject の行の ID → 関係する未読の通知（eventId）
+        private static readonly Dictionary<ItemId, HashSet<string>> _cache = new Dictionary<ItemId, HashSet<string>>();
+        // Scene のキー（HierarchyItemId.SceneKey）→ その Scene 内の Director に関係する未読の通知（eventId）。GameObject の ID と混ざらないよう別に持つ
+        private static readonly Dictionary<ulong, HashSet<string>> _sceneCache = new Dictionary<ulong, HashSet<string>>();
         private static bool _rebuildScheduled;
         private static GUIContent _icon;
 
         static HierarchyIndicator()
         {
+#if UNITY_6000_4_OR_NEWER
+            EditorApplication.hierarchyWindowItemByEntityIdOnGUI += OnHierarchyItemGUI;
+#else
             EditorApplication.hierarchyWindowItemOnGUI += OnHierarchyItemGUI;
+#endif
             GuardianHistory.Changed += ScheduleRebuild;
             GuardianSettings.Changed += ScheduleRebuild;
             EditorSceneManager.sceneOpened += OnSceneOpened;
@@ -108,14 +118,14 @@ namespace TimelineBindingGuardian
             Transform current = gameObject.transform;
             while (current != null)
             {
-                AddEvent(_cache, current.gameObject.GetInstanceID(), eventId);
+                AddEvent(_cache, HierarchyItemId.For(current.gameObject), eventId);
                 current = current.parent;
             }
 
-            AddEvent(_sceneCache, gameObject.scene.handle, eventId);
+            AddEvent(_sceneCache, HierarchyItemId.SceneKey(gameObject.scene), eventId);
         }
 
-        private static void AddEvent(Dictionary<int, HashSet<string>> cache, int key, string eventId)
+        private static void AddEvent<TKey>(Dictionary<TKey, HashSet<string>> cache, TKey key, string eventId)
         {
             if (!cache.TryGetValue(key, out HashSet<string> events))
             {
@@ -126,33 +136,34 @@ namespace TimelineBindingGuardian
             events.Add(eventId);
         }
 
-        private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
+        private static void OnHierarchyItemGUI(ItemId itemId, Rect selectionRect)
         {
             if (_cache.Count == 0)
             {
                 return;
             }
 
-            // Scene の見出し行（instanceId が読み込み済み Scene の handle）
-            if (_sceneCache.TryGetValue(instanceId, out HashSet<string> sceneEvents) && TryGetLoadedSceneName(instanceId, out string sceneName))
+            // Scene の見出し行（行の ID が読み込み済み Scene の handle を表す）
+            ulong sceneKey = HierarchyItemId.SceneKey(itemId);
+            if (_sceneCache.TryGetValue(sceneKey, out HashSet<string> sceneEvents) && TryGetLoadedSceneName(sceneKey, out string sceneName))
             {
                 Rect sceneRect = new Rect(selectionRect.x, selectionRect.y, selectionRect.width - SceneMenuButtonWidth, selectionRect.height);
                 DrawIndicator(sceneRect, sceneEvents, sceneName);
                 return;
             }
 
-            if (_cache.TryGetValue(instanceId, out HashSet<string> events))
+            if (_cache.TryGetValue(itemId, out HashSet<string> events))
             {
-                DrawIndicator(selectionRect, events, GetName(instanceId));
+                DrawIndicator(selectionRect, events, GetName(itemId));
             }
         }
 
-        private static bool TryGetLoadedSceneName(int handle, out string name)
+        private static bool TryGetLoadedSceneName(ulong sceneKey, out string name)
         {
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
                 Scene scene = SceneManager.GetSceneAt(i);
-                if (scene.handle == handle)
+                if (HierarchyItemId.SceneKey(scene) == sceneKey)
                 {
                     name = scene.name;
                     return true;
@@ -221,11 +232,9 @@ namespace TimelineBindingGuardian
             }
         }
 
-        private static string GetName(int instanceId)
+        private static string GetName(ItemId itemId)
         {
-#pragma warning disable 618
-            Object target = EditorUtility.InstanceIDToObject(instanceId);
-#pragma warning restore 618
+            Object target = HierarchyItemId.ToObject(itemId);
             return target != null ? target.name : Lang.T("views.hierarchy.selectedObject");
         }
     }
