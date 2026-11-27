@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 
@@ -18,6 +20,8 @@ namespace TimelineBindingGuardian
         [SerializeField] private bool monitoringEnabled = true;
         [SerializeField] private bool hierarchyIconsEnabled = true;
         [SerializeField] private bool consoleWarningsEnabled = true;
+        // 監視・記録から除外するフォルダ（Asset パス）。記録済みの履歴は消さない
+        [SerializeField] private List<string> excludedFolders = new List<string>();
 
         public static event Action Changed;
 
@@ -43,6 +47,36 @@ namespace TimelineBindingGuardian
         {
             get => consoleWarningsEnabled;
             set => SetValue(ref consoleWarningsEnabled, value);
+        }
+
+        public IReadOnlyList<string> ExcludedFolders => excludedFolders ?? (excludedFolders = new List<string>());
+
+        public bool IsExcluded(string assetPath)
+        {
+            return PathExclusion.IsExcluded(assetPath, ExcludedFolders);
+        }
+
+        public void AddExcludedFolder(string folder)
+        {
+            string normalized = PathExclusion.NormalizeFolder(folder);
+            bool exists = ExcludedFolders.Any(f => string.Equals(f, normalized, StringComparison.OrdinalIgnoreCase));
+            if (normalized.Length == 0 || exists)
+            {
+                return;
+            }
+
+            excludedFolders.Add(normalized);
+            Save();
+            Changed?.Invoke();
+        }
+
+        public void RemoveExcludedFolder(string folder)
+        {
+            if (excludedFolders != null && excludedFolders.Remove(folder))
+            {
+                Save();
+                Changed?.Invoke();
+            }
         }
 
         private static GuardianSettings Load()

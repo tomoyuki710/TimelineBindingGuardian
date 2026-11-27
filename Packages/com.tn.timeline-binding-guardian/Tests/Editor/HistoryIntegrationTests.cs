@@ -91,6 +91,20 @@ namespace TimelineBindingGuardian
         }
 
         [Test]
+        public void SceneInExcludedFolder_IsNotRecorded()
+        {
+            HistoryStore store = new HistoryStore(_directory, "test-project");
+            store.Load();
+            GuardianHistory history = new GuardianHistory(store, path => PathExclusion.IsExcluded(path, new[] { TestFixtureBuilder.Folder }));
+
+            RecordSummary summary = history.Record(ScanScene(TestFixtureBuilder.SceneAPath), "test");
+
+            Assert.That(summary.RecordedScopeCount, Is.EqualTo(0));
+            Assert.That(summary.SkippedReasons.Single(), Does.Contain("excluded folder"));
+            Assert.That(store.State.Scopes, Is.Empty);
+        }
+
+        [Test]
         public void UnsavedScene_IsNotRecorded()
         {
             GuardianHistory history = CreateHistory();

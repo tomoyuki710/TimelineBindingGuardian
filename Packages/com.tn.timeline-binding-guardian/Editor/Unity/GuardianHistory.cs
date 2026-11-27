@@ -42,10 +42,13 @@ namespace TimelineBindingGuardian
     public sealed class GuardianHistory
     {
         private static GuardianHistory _shared;
+        private readonly Func<string, bool> _isExcluded;
 
-        public GuardianHistory(HistoryStore store)
+        /// <param name="isExcluded">記録から除外するパスの判定。null なら除外しない（テスト用の履歴など）。</param>
+        public GuardianHistory(HistoryStore store, Func<string, bool> isExcluded = null)
         {
             Store = store;
+            _isExcluded = isExcluded ?? (path => false);
         }
 
         /// <summary>
@@ -66,7 +69,8 @@ namespace TimelineBindingGuardian
                 {
                     HistoryStore store = new HistoryStore(DefaultDirectory, PlayerSettings.productGUID.ToString());
                     store.Load();
-                    _shared = new GuardianHistory(store);
+                    // プロジェクトの履歴は設定の除外フォルダに従う
+                    _shared = new GuardianHistory(store, path => GuardianSettings.Instance.IsExcluded(path));
                 }
 
                 return _shared;
@@ -236,7 +240,7 @@ namespace TimelineBindingGuardian
             summary.NewNotifications.AddRange(created);
         }
 
-        private static bool TryGetSkipReason(ScanResult result, out string reason)
+        private bool TryGetSkipReason(ScanResult result, out string reason)
         {
             reason = string.Empty;
             if (!result.IsSaved)
@@ -246,6 +250,10 @@ namespace TimelineBindingGuardian
             else if (result.HasUnsavedChanges)
             {
                 reason = "the scene has unsaved changes (only saved states are recorded).";
+            }
+            else if (_isExcluded(result.Owner.AssetPathHint))
+            {
+                reason = "it is in an excluded folder (see Settings).";
             }
 
             return reason.Length > 0;

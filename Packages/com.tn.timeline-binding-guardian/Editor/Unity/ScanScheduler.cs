@@ -49,7 +49,8 @@ namespace TimelineBindingGuardian
         public static void Enqueue(string path, ScanTargetKind kind, string reason, bool isDerived = false)
         {
             bool accept = !string.IsNullOrEmpty(path) && GuardianSettings.Instance.MonitoringEnabled;
-            if (accept && !BindingChangeMonitor.IsSuspended)
+            bool excluded = GuardianSettings.Instance.IsExcluded(path) || BindingChangeMonitor.IsSuspended;
+            if (accept && !excluded)
             {
                 _queue.Enqueue(new ScanRequest(path, kind, reason, isDerived), EditorApplication.timeSinceStartup);
             }

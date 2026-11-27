@@ -1,4 +1,7 @@
+using System;
 using System.Globalization;
+using System.IO;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -15,6 +18,7 @@ namespace TimelineBindingGuardian
         private readonly Toggle _hierarchyIcons;
         private readonly Toggle _consoleWarnings;
         private readonly Label _storeLabel;
+        private readonly VisualElement _excludedList;
 
         public SettingsView()
         {
@@ -39,6 +43,14 @@ namespace TimelineBindingGuardian
             _consoleWarnings.RegisterValueChangedCallback(OnConsoleWarningsChanged);
             Root.Add(_consoleWarnings);
 
+            Root.Add(CreateHeader("Excluded folders"));
+            Root.Add(CreateMutedLabel("Scenes, prefabs, and timelines in these folders (and their subfolders) are not monitored or recorded, even by Scan Now. Existing history is kept."));
+            _excludedList = new VisualElement();
+            Root.Add(_excludedList);
+            Button add = new Button(OnAddFolderClicked) { text = "Add Folder…" };
+            add.style.alignSelf = Align.FlexStart;
+            Root.Add(add);
+
             Root.Add(CreateHeader("History"));
             _storeLabel = new Label();
             _storeLabel.style.whiteSpace = WhiteSpace.Normal;
@@ -56,10 +68,76 @@ namespace TimelineBindingGuardian
             _hierarchyIcons.SetValueWithoutNotify(settings.HierarchyIconsEnabled);
             _consoleWarnings.SetValueWithoutNotify(settings.ConsoleWarningsEnabled);
 
+            RefreshExcludedFolders(settings);
+
             HistoryStore store = GuardianHistory.Shared.Store;
             string size = (store.GetTotalSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
             string status = store.IsWritable ? "OK" : $"read-only ({store.Status}): {store.ErrorMessage}";
             _storeLabel.text = $"Folder: {store.Directory}\nSize on disk: {size} KB   Scopes: {store.State.Scopes.Count}   Events: {store.State.Events.Count}   Status: {status}";
+        }
+
+        private void RefreshExcludedFolders(GuardianSettings settings)
+        {
+            _excludedList.Clear();
+            if (settings.ExcludedFolders.Count == 0)
+            {
+                _excludedList.Add(CreateMutedLabel("(none)"));
+                return;
+            }
+
+            foreach (string folder in settings.ExcludedFolders)
+            {
+                VisualElement row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                Label label = new Label(folder);
+                label.style.unityTextAlign = TextAnchor.MiddleLeft;
+                label.style.minWidth = 300;
+                row.Add(label);
+                string target = folder;
+                row.Add(new Button(() => OnRemoveFolderClicked(target)) { text = "Remove" });
+                _excludedList.Add(row);
+            }
+        }
+
+        private void OnAddFolderClicked()
+        {
+            string selected = EditorUtility.OpenFolderPanel("Exclude folder from Timeline Binding Guardian", Application.dataPath, string.Empty);
+            if (string.IsNullOrEmpty(selected))
+            {
+                return;
+            }
+
+            string assetPath = ToAssetPath(selected);
+            if (assetPath == null)
+            {
+                EditorUtility.DisplayDialog("Timeline Binding Guardian", "Select a folder inside this project's Assets folder.", "OK");
+                return;
+            }
+
+            GuardianSettings.Instance.AddExcludedFolder(assetPath);
+        }
+
+        private void OnRemoveFolderClicked(string folder)
+        {
+            GuardianSettings.Instance.RemoveExcludedFolder(folder);
+        }
+
+        /// <summary>
+        /// 絶対パスをプロジェクトの Asset パス（Assets/...）に変換する。Assets の外なら null。
+        /// </summary>
+        private static string ToAssetPath(string absolutePath)
+        {
+            string projectRoot = Path.GetDirectoryName(Application.dataPath)?.Replace('\\', '/') ?? string.Empty;
+            string path = absolutePath.Replace('\\', '/');
+            bool insideProject = path.StartsWith(projectRoot + "/", StringComparison.OrdinalIgnoreCase);
+            if (!insideProject)
+            {
+                return null;
+            }
+
+            string relative = path.Substring(projectRoot.Length + 1);
+            bool isAssets = relative.Equals("Assets", StringComparison.OrdinalIgnoreCase) || relative.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase);
+            return isAssets ? relative : null;
         }
 
         private void OnMonitoringChanged(ChangeEvent<bool> changeEvent)
