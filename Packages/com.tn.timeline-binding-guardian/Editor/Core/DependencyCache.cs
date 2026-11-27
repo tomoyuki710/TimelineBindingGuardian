@@ -5,90 +5,132 @@ using System.Linq;
 namespace TimelineBindingGuardian
 {
     /// <summary>
-    /// パスごとの依存一覧（推移的、自分自身を含む）のキャッシュ。Unity に依存しない。
-    /// アセット X が変わったときは、X 自身と、X を依存に含む一覧だけを捨てる。
-    /// - X の参照先が変わると、X を含む一覧は古くなる。
-    /// - X を新たに参照し始めたものは、そのファイル自身が変わってインポートされるので、そのときに捨てられる。
+    /// 依存関係のキャッシュ。Unity に依存しない。
+    /// - パスごとに「1 段だけの依存」を提供関数から取得して持つ（再帰的な取得は、テクスチャ等まで何千件もたどって重いため使わない）。
+    /// - 推移的な依存一覧は、1 段の依存をたどって作る。たどるのは Prefab・Scene・Timeline（.prefab / .unity / .playable）だけで、
+    ///   それ以外（スクリプト・モデル・マテリアルなど）はたどらずに「葉」として一覧に入れる。一覧には自分自身も含む。
+    /// - アセットが変わったら、そのアセットの 1 段の依存だけを捨てる（推移的な一覧のメモは作り直しが軽いので全部捨てる）。
     /// </summary>
     public sealed class DependencyCache
     {
-        private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        private static readonly string[] TraversedExtensions = { ".prefab", ".unity", ".playable" };
+
+        private readonly Dictionary<string, string[]> _direct = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Closure> _closures = new Dictionary<string, Closure>(StringComparer.Ordinal);
         private readonly Func<string, string[]> _provider;
 
-        /// <param name="provider">パスの依存一覧（推移的）を取得する関数。</param>
+        /// <param name="provider">パスの 1 段だけの依存を取得する関数（自分自身は含まなくてよい）。</param>
         public DependencyCache(Func<string, string[]> provider)
         {
             _provider = provider;
         }
 
-        public int Count => _entries.Count;
+        /// <summary>
+        /// 1 段の依存をキャッシュしているパスの数。
+        /// </summary>
+        public int Count => _direct.Count;
 
+        /// <summary>
+        /// 1 段の依存をキャッシュしているか。
+        /// </summary>
         public bool Contains(string path)
         {
-            return _entries.ContainsKey(path);
+            return _direct.ContainsKey(path);
         }
 
         /// <summary>
-        /// 依存一覧を序数順に並べたもの（指紋の計算で使う）。
+        /// 推移的な依存一覧（自分自身を含む）を序数順に並べたもの（指紋の計算で使う）。
         /// </summary>
         public IReadOnlyList<string> GetSorted(string path)
         {
-            return GetEntry(path).Sorted;
+            return GetClosure(path).Sorted;
         }
 
         public bool DependsOn(string path, string dependency)
         {
-            return GetEntry(path).Set.Contains(dependency);
+            return GetClosure(path).Set.Contains(dependency);
         }
 
         /// <summary>
-        /// 変わったアセット（インポート・移動・削除）ごとに、その自身と、それを依存に含む一覧を捨てる。
+        /// 変わったアセット（インポート・移動・削除）の 1 段の依存を捨てる。
         /// </summary>
         public void Invalidate(IEnumerable<string> changedPaths)
         {
+            bool removed = false;
             foreach (string changed in changedPaths)
             {
-                if (string.IsNullOrEmpty(changed) || _entries.Count == 0)
+                if (!string.IsNullOrEmpty(changed))
                 {
-                    continue;
+                    removed |= _direct.Remove(changed);
                 }
+            }
 
-                _entries.Remove(changed);
-                List<string> stale = _entries.Where(pair => pair.Value.Set.Contains(changed)).Select(pair => pair.Key).ToList();
-                foreach (string key in stale)
-                {
-                    _entries.Remove(key);
-                }
+            if (removed)
+            {
+                _closures.Clear();
             }
         }
 
         public void Clear()
         {
-            _entries.Clear();
+            _direct.Clear();
+            _closures.Clear();
         }
 
-        private Entry GetEntry(string path)
+        private Closure GetClosure(string path)
         {
-            if (!_entries.TryGetValue(path, out Entry entry))
+            if (_closures.TryGetValue(path, out Closure closure))
             {
-                entry = new Entry(_provider(path) ?? Array.Empty<string>());
-                _entries.Add(path, entry);
+                return closure;
             }
 
-            return entry;
+            HashSet<string> visited = new HashSet<string>(StringComparer.Ordinal) { path };
+            Queue<string> pending = new Queue<string>();
+            pending.Enqueue(path);
+            while (pending.Count > 0)
+            {
+                foreach (string dependency in GetDirect(pending.Dequeue()))
+                {
+                    bool isNew = visited.Add(dependency);
+                    if (isNew && IsTraversed(dependency))
+                    {
+                        pending.Enqueue(dependency);
+                    }
+                }
+            }
+
+            closure = new Closure(visited);
+            _closures.Add(path, closure);
+            return closure;
         }
 
-        private sealed class Entry
+        private string[] GetDirect(string path)
         {
-            public Entry(string[] dependencies)
+            if (!_direct.TryGetValue(path, out string[] dependencies))
             {
-                Sorted = dependencies.OrderBy(p => p, StringComparer.Ordinal).ToArray();
-                Set = new HashSet<string>(dependencies, StringComparer.Ordinal);
+                dependencies = _provider(path) ?? Array.Empty<string>();
+                _direct.Add(path, dependencies);
             }
 
-            public string[] Sorted { get; }
+            return dependencies;
+        }
+
+        private static bool IsTraversed(string path)
+        {
+            return TraversedExtensions.Any(e => path.EndsWith(e, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private sealed class Closure
+        {
+            public Closure(HashSet<string> paths)
+            {
+                Set = paths;
+                Sorted = paths.OrderBy(p => p, StringComparer.Ordinal).ToArray();
+            }
 
             public HashSet<string> Set { get; }
+
+            public string[] Sorted { get; }
         }
     }
 }

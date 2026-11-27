@@ -15,13 +15,14 @@ namespace TimelineBindingGuardian
     /// - それ以外の依存（Track の型のスクリプトなど）は Unity の依存ハッシュを使う（軽い）。
     /// - 検査ロジックの版と Unity のバージョンも含める（検査の中身が変わったら全件を検査し直すため）。
     /// 負荷対策:
-    /// - 依存一覧は DependencyIndex のキャッシュを共有する（変わったアセットの分だけ取り直す）。
+    /// - 依存一覧は DependencyIndex のキャッシュを共有する。Prefab・Scene・Timeline の間だけをたどり、それらが直接参照するもの
+    ///   （モデル・Track のスクリプトなど）は依存ハッシュで含める。テクスチャの中身など、検査結果に関係しない深い変化は含めない。
     /// - ファイル内容のハッシュは、ファイルサイズと最終更新時刻が同じなら使い回す（変わっていないファイルは読み直さない）。
     /// </summary>
     public static class ScopeFingerprint
     {
-        // 検査結果に影響する変更、または指紋の作り方を変えたら上げる（2: ファイルごとのハッシュを使い回す方式）
-        public const string LogicVersion = "2";
+        // 検査結果に影響する変更、または指紋の作り方を変えたら上げる（2: ファイルごとのハッシュを使い回す方式、3: 依存は Prefab・Scene・Timeline の間だけたどる）
+        public const string LogicVersion = "3";
 
         private static readonly string[] ContentHashedExtensions = { ".unity", ".prefab", ".playable" };
         private static readonly Dictionary<string, FileHash> _fileHashes = new Dictionary<string, FileHash>(StringComparer.Ordinal);

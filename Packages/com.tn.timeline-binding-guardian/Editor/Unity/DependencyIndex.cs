@@ -7,12 +7,13 @@ namespace TimelineBindingGuardian
     /// <summary>
     /// 履歴にある Scope（Scene / Prefab）→ 依存アセット（推移的）の逆引き。
     /// Prefab や Timeline が変わったときに、再検査すべき Scope と「影響の可能性があるが未検査の Scene」を求める。
-    /// 依存一覧は AssetDatabase から取り、メモリにキャッシュする（指紋の計算でも共有する）。
-    /// アセットがインポート・移動・削除されたら、そのアセットと、それを依存に含む一覧だけを捨てる。
+    /// 依存は AssetDatabase から 1 段ずつ取り（再帰的な取得はテクスチャ等まで何千件もたどって重いため使わない）、
+    /// Prefab・Scene・Timeline の間だけをたどって一覧にする。メモリにキャッシュし、指紋の計算でも共有する。
+    /// アセットがインポート・移動・削除されたら、そのアセットの 1 段の依存だけを捨てる。
     /// </summary>
     public static class DependencyIndex
     {
-        private static readonly DependencyCache _cache = new DependencyCache(path => AssetDatabase.GetDependencies(path, true));
+        private static readonly DependencyCache _cache = new DependencyCache(path => AssetDatabase.GetDependencies(path, false));
 
         /// <summary>
         /// すべて捨てる（テスト用・確実に取り直したいとき）。
@@ -23,7 +24,7 @@ namespace TimelineBindingGuardian
         }
 
         /// <summary>
-        /// 変わったアセットと、それを依存に含む一覧だけを捨てる。
+        /// 変わったアセットの 1 段の依存だけを捨てる。
         /// </summary>
         public static void Invalidate(IEnumerable<string> changedPaths)
         {
@@ -31,7 +32,7 @@ namespace TimelineBindingGuardian
         }
 
         /// <summary>
-        /// 依存一覧（推移的、自分自身を含む）を序数順に並べたもの。
+        /// 依存一覧（自分自身、たどった Prefab・Scene・Timeline、それらが直接参照するもの）を序数順に並べたもの。
         /// </summary>
         public static IReadOnlyList<string> GetSortedDependencies(string path)
         {

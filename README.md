@@ -67,7 +67,7 @@ Unity 6000.4・6000.5 は、公式の API 情報に基づいて対応してい�
    バージョンを固定する場合（推奨）は、末尾にタグを付けます。
 
    ```
-   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.2
+   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.3
    ```
 
 4. Unity のコンパイルが終わったら、**Window > Timeline Binding Guardian** を開きます。

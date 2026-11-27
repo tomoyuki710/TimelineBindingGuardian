@@ -118,7 +118,7 @@ namespace TimelineBindingGuardian
         private static List<string> GetDependentPrefabPaths(IEnumerable<string> scenePaths)
         {
             return scenePaths
-                .SelectMany(p => AssetDatabase.GetDependencies(p, true))
+                .SelectMany(p => DependencyIndex.GetSortedDependencies(p))
                 .Where(p => p.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(p => p, StringComparer.Ordinal)

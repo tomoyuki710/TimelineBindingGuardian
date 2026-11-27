@@ -61,7 +61,7 @@ Unity 6000.4 and 6000.5 are supported based on Unity's official API documentatio
    To pin a specific version (recommended), add the tag at the end:
 
    ```
-   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.2
+   https://github.com/tomoyuki710/TimelineBindingGuardian.git?path=/Packages/com.tn.timeline-binding-guardian#v0.1.3
    ```
 
 4. After Unity finishes compiling, open **Window > Timeline Binding Guardian**.
