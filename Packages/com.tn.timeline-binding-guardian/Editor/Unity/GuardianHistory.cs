@@ -84,13 +84,13 @@ namespace TimelineBindingGuardian
             RecordSummary summary = new RecordSummary();
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                summary.Error = "History is not recorded in Play Mode.";
+                summary.Error = Lang.T("engine.history.playMode");
                 return summary;
             }
 
             if (!Store.IsWritable)
             {
-                summary.Error = $"History is read-only: {Store.ErrorMessage}";
+                summary.Error = Lang.T("engine.store.readOnly", Store.ErrorMessage);
                 return summary;
             }
 
@@ -113,7 +113,7 @@ namespace TimelineBindingGuardian
             {
                 // 途中まで更新された状態を捨て、直前に保存された状態へ戻す
                 Store.Load();
-                summary.Error = $"History could not be updated: {exception.Message}";
+                summary.Error = Lang.T("engine.history.updateFailed", exception.Message);
                 summary.ClearResults();
                 return summary;
             }
@@ -146,7 +146,7 @@ namespace TimelineBindingGuardian
             error = string.Empty;
             if (!Store.IsWritable)
             {
-                error = $"History is read-only: {Store.ErrorMessage}";
+                error = Lang.T("engine.store.readOnly", Store.ErrorMessage);
                 return false;
             }
 
@@ -220,7 +220,7 @@ namespace TimelineBindingGuardian
             bool loaded = Store.EnsureScopeLoaded(result.Owner.AssetGuid) && Store.EnsureOwnersLoaded(owners);
             if (!loaded)
             {
-                throw new InvalidOperationException($"History is read-only: {Store.ErrorMessage}");
+                throw new InvalidOperationException(Lang.T("engine.store.readOnly", Store.ErrorMessage));
             }
 
             string observationId = Guid.NewGuid().ToString("N");
@@ -245,15 +245,15 @@ namespace TimelineBindingGuardian
             reason = string.Empty;
             if (!result.IsSaved)
             {
-                reason = "the scene has never been saved (no stable ID).";
+                reason = Lang.T("engine.skip.neverSaved");
             }
             else if (result.HasUnsavedChanges)
             {
-                reason = "the scene has unsaved changes (only saved states are recorded).";
+                reason = Lang.T("engine.skip.unsavedChanges");
             }
             else if (_isExcluded(result.Owner.AssetPathHint))
             {
-                reason = "it is in an excluded folder (see Settings).";
+                reason = Lang.T("engine.skip.excludedFolder");
             }
 
             return reason.Length > 0;

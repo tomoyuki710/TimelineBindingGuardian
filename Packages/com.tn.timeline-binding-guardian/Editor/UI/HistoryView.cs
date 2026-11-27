@@ -16,16 +16,21 @@ namespace TimelineBindingGuardian
     /// </summary>
     internal sealed class HistoryView
     {
-        private const string AllTypes = "All types";
-        private const string BindingChangesOnly = "Binding changes only";
+        // 期間・種別フィルタの内部値。表示文字列は表示時に Lang.T で作るので、翻訳されても判定は変わらない
+        private const string PeriodLast24Hours = "last24Hours";
+        private const string PeriodLast7Days = "last7Days";
+        private const string PeriodSinceDate = "sinceDate";
+        private const string PeriodAllTime = "allTime";
+        private const string AllTypes = "*allTypes";
+        private const string BindingChangesOnly = "*bindingChangesOnly";
 
         private static readonly Color AttentionColor = new Color(0.95f, 0.65f, 0.2f);
         private static readonly Color MutedColor = new Color(0.6f, 0.6f, 0.6f);
 
-        private static readonly string[] PeriodChoices = { "Last 24 hours", "Last 7 days", "Since date", "All time" };
+        private static readonly string[] PeriodChoices = { PeriodLast24Hours, PeriodLast7Days, PeriodSinceDate, PeriodAllTime };
 
         private readonly List<ChangeEvent> _visibleEvents = new List<ChangeEvent>();
-        private string _period = "All time";
+        private string _period = PeriodAllTime;
         private string _typeFilter = BindingChangesOnly;
         private string _searchText = string.Empty;
         private string _sinceText = string.Empty;
@@ -49,7 +54,7 @@ namespace TimelineBindingGuardian
 
             _storeLabel = CreateMutedLabel(string.Empty);
             Root.Add(_storeLabel);
-            Root.Add(CreateMutedLabel("Times are observation times (when a scan noticed the change), not when the change was made or who made it."));
+            Root.Add(CreateMutedLabel(Lang.T("views.history.timesNote")));
 
             TwoPaneSplitView split = new TwoPaneSplitView(0, 260, TwoPaneSplitViewOrientation.Vertical);
             split.style.flexGrow = 1;
@@ -77,13 +82,13 @@ namespace TimelineBindingGuardian
             HistoryStore store = history.Store;
             string size = (store.GetTotalSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
             _storeLabel.text = store.IsWritable
-                ? $"History folder: {store.Directory} ({size} KB on disk, {store.State.Events.Count} event(s), local only)"
-                : $"History is read-only ({store.Status}): {store.ErrorMessage}  Folder: {store.Directory}";
+                ? Lang.T("views.history.store.writable", store.Directory, size, store.State.Events.Count)
+                : Lang.T("views.history.store.readOnly", store.Status, store.ErrorMessage, store.Directory);
             _storeLabel.style.color = store.IsWritable ? new StyleColor(MutedColor) : new StyleColor(AttentionColor);
 
             _visibleEvents.Clear();
             _visibleEvents.AddRange(store.State.Events.Where(Matches).OrderByDescending(e => e.ObservedAtUtc, StringComparer.Ordinal));
-            _countLabel.text = $"{_visibleEvents.Count} event(s)";
+            _countLabel.text = Lang.T("views.history.count", _visibleEvents.Count);
             _listView.ClearSelection();
             _listView.RefreshItems();
             ShowDetails(null);
@@ -96,7 +101,7 @@ namespace TimelineBindingGuardian
         {
             _contextKey = bindingKey;
             _contextOwnerLevelKeys = new HashSet<string>(ownerLevelKeys);
-            _contextFilterLabel.text = $"Showing history for: {label}";
+            _contextFilterLabel.text = Lang.T("views.history.filter", label);
             _contextFilterRow.style.display = DisplayStyle.Flex;
             Refresh();
         }
@@ -121,13 +126,13 @@ namespace TimelineBindingGuardian
         private VisualElement CreateFilterBar()
         {
             Toolbar bar = new Toolbar();
-            PopupField<string> period = new PopupField<string>(PeriodChoices.ToList(), _period);
+            PopupField<string> period = new PopupField<string>(PeriodChoices.ToList(), _period, FormatPeriodChoice, FormatPeriodChoice);
             period.style.width = 120;
             period.RegisterValueChangedCallback(OnPeriodChanged);
             bar.Add(period);
 
             _sinceField = new TextField { value = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) };
-            _sinceField.tooltip = "Local date/time, e.g. 2026-11-27 or 2026-11-27 10:00";
+            _sinceField.tooltip = Lang.T("views.history.since.tooltip");
             _sinceField.style.width = 130;
             _sinceField.style.display = DisplayStyle.None;
             _sinceField.RegisterValueChangedCallback(OnSinceChanged);
@@ -136,13 +141,13 @@ namespace TimelineBindingGuardian
 
             List<string> types = new List<string> { BindingChangesOnly, AllTypes };
             types.AddRange(Enum.GetNames(typeof(ChangeType)));
-            PopupField<string> type = new PopupField<string>(types, _typeFilter);
+            PopupField<string> type = new PopupField<string>(types, _typeFilter, FormatTypeChoice, FormatTypeChoice);
             type.style.width = 170;
             type.RegisterValueChangedCallback(OnTypeChanged);
             bar.Add(type);
 
             ToolbarSearchField search = new ToolbarSearchField();
-            search.tooltip = "Search scene, prefab, director, or track";
+            search.tooltip = Lang.T("views.history.search.tooltip");
             search.RegisterValueChangedCallback(OnSearchChanged);
             bar.Add(search);
 
@@ -155,6 +160,42 @@ namespace TimelineBindingGuardian
             return bar;
         }
 
+        /// <summary>
+        /// 期間フィルタの内部値を表示文字列にする。
+        /// </summary>
+        private static string FormatPeriodChoice(string period)
+        {
+            switch (period)
+            {
+                case PeriodLast24Hours:
+                    return Lang.T("views.history.period.last24Hours");
+                case PeriodLast7Days:
+                    return Lang.T("views.history.period.last7Days");
+                case PeriodSinceDate:
+                    return Lang.T("views.history.period.sinceDate");
+                case PeriodAllTime:
+                    return Lang.T("views.history.period.allTime");
+                default:
+                    return period;
+            }
+        }
+
+        /// <summary>
+        /// 種別フィルタの内部値を表示文字列にする。ChangeType の値は enum 名のまま表示する。
+        /// </summary>
+        private static string FormatTypeChoice(string typeFilter)
+        {
+            switch (typeFilter)
+            {
+                case AllTypes:
+                    return Lang.T("views.history.type.all");
+                case BindingChangesOnly:
+                    return Lang.T("views.history.type.bindingChangesOnly");
+                default:
+                    return typeFilter;
+            }
+        }
+
         private VisualElement CreateContextFilterRow()
         {
             _contextFilterRow = new VisualElement();
@@ -164,14 +205,14 @@ namespace TimelineBindingGuardian
             _contextFilterLabel = new Label();
             _contextFilterLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
             _contextFilterRow.Add(_contextFilterLabel);
-            _contextFilterRow.Add(new Button(OnClearContextClicked) { text = "Clear" });
+            _contextFilterRow.Add(new Button(OnClearContextClicked) { text = Lang.T("views.common.clear") });
             return _contextFilterRow;
         }
 
         private void OnPeriodChanged(ChangeEvent<string> changeEvent)
         {
             _period = changeEvent.newValue;
-            _sinceField.style.display = _period == "Since date" ? DisplayStyle.Flex : DisplayStyle.None;
+            _sinceField.style.display = _period == PeriodSinceDate ? DisplayStyle.Flex : DisplayStyle.None;
             Refresh();
         }
 
@@ -224,7 +265,7 @@ namespace TimelineBindingGuardian
 
         private bool MatchesPeriod(ChangeEvent changeEvent)
         {
-            if (_period == "All time")
+            if (_period == PeriodAllTime)
             {
                 return true;
             }
@@ -237,10 +278,10 @@ namespace TimelineBindingGuardian
             DateTime threshold;
             switch (_period)
             {
-                case "Last 24 hours":
+                case PeriodLast24Hours:
                     threshold = DateTime.UtcNow.AddHours(-24);
                     break;
-                case "Last 7 days":
+                case PeriodLast7Days:
                     threshold = DateTime.UtcNow.AddDays(-7);
                     break;
                 default:
@@ -312,7 +353,7 @@ namespace TimelineBindingGuardian
             string time = FormatLocalTime(changeEvent.ObservedAtUtc);
             if (changeEvent.ChangeType == ChangeType.Initial)
             {
-                return $"{time}   Initial   {changeEvent.Owner}   {changeEvent.Note}";
+                return $"{time}   Initial   {changeEvent.Owner}   {Lang.RenderNote(changeEvent.Note)}";
             }
 
             string owner = Path.GetFileName(changeEvent.Owner.AssetPathHint);
@@ -326,11 +367,11 @@ namespace TimelineBindingGuardian
         {
             if (changeEvent.OriginUndetermined)
             {
-                return "[origin undetermined]";
+                return $"[{Lang.T("views.common.impact.originUndetermined")}]";
             }
 
             int count = changeEvent.AffectedContexts.Count;
-            return count > 0 ? $"[affects {count} context(s)]" : "[no effect on observed contexts]";
+            return count > 0 ? $"[{Lang.T("views.common.impact.affects", count)}]" : $"[{Lang.T("views.common.impact.noEffect")}]";
         }
 
         public static string FormatValue(LevelValue value)
@@ -355,30 +396,31 @@ namespace TimelineBindingGuardian
             _details.Clear();
             if (changeEvent == null)
             {
-                _details.Add(CreateMutedLabel("Select an event to see details. Null is not necessarily an error; a parent prefab may clear a binding on purpose."));
+                _details.Add(CreateMutedLabel(Lang.T("views.history.selectPrompt")));
                 return;
             }
 
-            _details.Add(CreateHeader($"{changeEvent.ChangeType}   (observed {FormatLocalTime(changeEvent.ObservedAtUtc)})"));
-            _details.Add(new Label($"Changed at: {changeEvent.Owner} ({changeEvent.Owner.AssetKind})"));
+            _details.Add(CreateHeader(Lang.T("views.history.details.header", changeEvent.ChangeType, FormatLocalTime(changeEvent.ObservedAtUtc))));
+            _details.Add(new Label(Lang.T("views.common.changedAt", changeEvent.Owner, changeEvent.Owner.AssetKind)));
             if (!string.IsNullOrEmpty(changeEvent.Director.HierarchyPathHint))
             {
-                _details.Add(new Label($"Director: {changeEvent.Director.HierarchyPathHint}"));
-                _details.Add(new Label($"Track: {changeEvent.Track.TrackPathHint}   Timeline: {changeEvent.Track.TimelinePathHint}"));
-                _details.Add(new Label($"Value at that level: {FormatValue(changeEvent.Before)} → {FormatValue(changeEvent.After)}"));
+                _details.Add(new Label(Lang.T("views.common.director", changeEvent.Director.HierarchyPathHint)));
+                _details.Add(new Label(Lang.T("views.common.trackTimeline", changeEvent.Track.TrackPathHint, changeEvent.Track.TimelinePathHint)));
+                _details.Add(new Label(Lang.T("views.common.valueAtLevel", FormatValue(changeEvent.Before), FormatValue(changeEvent.After))));
             }
 
             if (changeEvent.OriginUndetermined)
             {
-                _details.Add(CreateWarningLabel("Origin undetermined: the level that caused this change could not be identified."));
+                _details.Add(CreateWarningLabel(Lang.T("views.common.originUndetermined")));
             }
 
             if (!string.IsNullOrEmpty(changeEvent.Note))
             {
-                _details.Add(CreateMutedLabel(changeEvent.Note));
+                _details.Add(CreateMutedLabel(Lang.RenderNote(changeEvent.Note)));
             }
 
             AddOpenButton(changeEvent.Owner);
+            AddRestoreButton(changeEvent);
             AddAffectedContexts(changeEvent);
         }
 
@@ -391,9 +433,25 @@ namespace TimelineBindingGuardian
             }
 
             string path = owner.AssetPathHint;
-            Button open = new Button(() => OpenAsset(path)) { text = "Open Prefab" };
+            Button open = new Button(() => OpenAsset(path)) { text = Lang.T("views.common.openPrefab") };
             open.style.alignSelf = Align.FlexStart;
             _details.Add(open);
+        }
+
+        /// <summary>
+        /// 過去の状態（このイベントの変更前）を復元候補にする。可否と理由は Restore Preview で表示する。
+        /// </summary>
+        private void AddRestoreButton(ChangeEvent changeEvent)
+        {
+            bool isBindingChange = changeEvent.ChangeType != ChangeType.Initial && !string.IsNullOrEmpty(changeEvent.Director.GlobalObjectId);
+            if (!isBindingChange)
+            {
+                return;
+            }
+
+            Button restore = new Button(() => RestorePreviewWindow.Open(changeEvent)) { text = Lang.T("views.history.restore") };
+            restore.style.alignSelf = Align.FlexStart;
+            _details.Add(restore);
         }
 
         private void AddAffectedContexts(ChangeEvent changeEvent)
@@ -403,19 +461,19 @@ namespace TimelineBindingGuardian
                 return;
             }
 
-            _details.Add(CreateHeader($"Effective value in observed contexts ({changeEvent.AffectedContexts.Count})"));
+            _details.Add(CreateHeader(Lang.T("views.common.effectiveHeader", changeEvent.AffectedContexts.Count)));
             if (changeEvent.AffectedContexts.Count == 0)
             {
-                _details.Add(CreateMutedLabel("No observed scene context changed its effective value (for example, an upper level overrides this binding)."));
+                _details.Add(CreateMutedLabel(Lang.T("views.history.noAffected")));
                 return;
             }
 
             foreach (AffectedContext context in changeEvent.AffectedContexts)
             {
-                string note = string.IsNullOrEmpty(context.Note) ? string.Empty : $"   ({context.Note})";
+                string note = string.IsNullOrEmpty(context.Note) ? string.Empty : $"   ({Lang.RenderNote(context.Note)})";
                 string directorPath = string.IsNullOrEmpty(context.DirectorIndexPathHint) ? context.DirectorPathHint : context.DirectorIndexPathHint;
                 Label row = new Label($"{context.ScopePathHint}   {directorPath}   {FormatValue(context.EffectiveBefore)} → {FormatValue(context.EffectiveAfter)}{note}");
-                row.tooltip = "Path format: Name#SiblingIndex (distinguishes instances with the same name).";
+                row.tooltip = Lang.T("views.history.pathTooltip");
                 _details.Add(row);
             }
         }

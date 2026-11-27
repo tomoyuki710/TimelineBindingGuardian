@@ -22,10 +22,50 @@ namespace TimelineBindingGuardian
         [SerializeField] private bool consoleWarningsEnabled = true;
         // 監視・記録から除外するフォルダ（Asset パス）。記録済みの履歴は消さない
         [SerializeField] private List<string> excludedFolders = new List<string>();
+        // 表示言語（既定は Unity の表示言語に合わせる）
+        [SerializeField] private LanguagePreference language = LanguagePreference.Auto;
 
         public static event Action Changed;
 
-        public static GuardianSettings Instance => _instance ?? (_instance = Load());
+        public static GuardianSettings Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = Load();
+                    _instance.ApplyLanguage();
+                }
+
+                return _instance;
+            }
+        }
+
+        public LanguagePreference Language
+        {
+            get => language;
+            set
+            {
+                if (language == value)
+                {
+                    return;
+                }
+
+                language = value;
+                ApplyLanguage();
+                Save();
+                Changed?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// 設定の言語を Lang.Current に反映する。
+        /// </summary>
+        public void ApplyLanguage()
+        {
+            // 自動のときは OS の言語設定から判断する
+            Lang.Current = Lang.Resolve(language, System.Globalization.CultureInfo.CurrentUICulture);
+        }
 
         public static string FilePath => Path.Combine(GuardianHistory.DefaultDirectory, FileName);
 
@@ -92,7 +132,7 @@ namespace TimelineBindingGuardian
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"[Timeline Binding Guardian] Settings could not be read. Defaults are used. {exception.Message}");
+                Debug.LogWarning(Lang.T("engine.warning.settingsReadFailed", exception.Message));
                 return new GuardianSettings();
             }
         }
@@ -118,7 +158,7 @@ namespace TimelineBindingGuardian
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"[Timeline Binding Guardian] Settings could not be saved. {exception.Message}");
+                Debug.LogWarning(Lang.T("engine.warning.settingsSaveFailed", exception.Message));
             }
         }
     }

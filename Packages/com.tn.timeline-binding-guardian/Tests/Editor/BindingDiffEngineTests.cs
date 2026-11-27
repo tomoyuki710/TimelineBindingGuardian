@@ -78,7 +78,7 @@ namespace TimelineBindingGuardian
             DiffResult resolved = Apply(state, SceneA, Context(SceneA, "d1", "AnimA", NullValue()));
             ChangeEvent lost = resolved.NewEvents.Single();
             Assert.That(lost.ChangeType, Is.EqualTo(ChangeType.BindingLost));
-            Assert.That(lost.AffectedContexts.Single().Note, Does.Contain("unknown"));
+            Assert.That(Lang.RenderNote(lost.AffectedContexts.Single().Note), Does.Contain("unknown"));
         }
 
         [Test]

@@ -72,10 +72,14 @@ namespace TimelineBindingGuardian
         private SettingsView _settingsView;
         private readonly Dictionary<Tab, ToolbarToggle> _tabToggles = new Dictionary<Tab, ToolbarToggle>();
         private Tab _currentTab = Tab.Notifications;
-        private string _lastRecordMessage = string.Empty;
+        // 表示言語を切り替えたときに作り直せるよう、文言ではなく記録結果そのものを持つ
+        private RecordSummary _lastRecordSummary;
         private bool _subscribed;
+        // 前回 UI を作ったときの表示言語（変わっていたら UI を作り直す）
+        private UiLanguage _builtLanguage;
+        private bool _rebuildScheduled;
 
-        [MenuItem("Window/Timeline/Timeline Binding Guardian")]
+        [MenuItem("Window/Timeline Binding Guardian")]
         private static void Open()
         {
             GetOrCreateWindow();
@@ -101,6 +105,19 @@ namespace TimelineBindingGuardian
 
         private void CreateGUI()
         {
+            BuildUI();
+            Subscribe();
+            // 待機中の自動検査の件数などを表示し続ける（件数を数えるだけで検査はしない）
+            rootVisualElement.schedule.Execute(UpdateHeader).Every(1000);
+        }
+
+        /// <summary>
+        /// UI を組み立てる。言語の切り替え時にも呼ぶため、表示中のタブとスキャン結果はそのまま引き継ぐ。
+        /// </summary>
+        private void BuildUI()
+        {
+            _builtLanguage = Lang.Current;
+            _tabToggles.Clear();
             rootVisualElement.Add(CreateToolbar());
 
             _headerLabel = new Label();
@@ -109,7 +126,7 @@ namespace TimelineBindingGuardian
             _headerLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             rootVisualElement.Add(_headerLabel);
 
-            _statusLabel = new Label("Scenes and prefabs are checked automatically when saved, imported, or opened. Press \"Scan Now\" to inspect the open scene.");
+            _statusLabel = new Label(Lang.T("window.status.initial", Lang.T("window.scanNow")));
             _statusLabel.style.paddingLeft = 6;
             _statusLabel.style.paddingTop = 2;
             _statusLabel.style.paddingBottom = 2;
@@ -135,11 +152,30 @@ namespace TimelineBindingGuardian
             _settingsView = new SettingsView();
             rootVisualElement.Add(_settingsView.Root);
 
+            // 作り直したときは、前回のスキャン結果を表示し直す
+            if (_results.Count > 0)
+            {
+                UpdateStatus();
+                RebuildTree();
+            }
+
             ShowDetailsPlaceholder();
             ShowTab(_currentTab);
-            Subscribe();
-            // 待機中の自動検査の件数などを表示し続ける（件数を数えるだけで検査はしない）
-            rootVisualElement.schedule.Execute(UpdateHeader).Every(1000);
+        }
+
+        /// <summary>
+        /// 表示言語が前回 UI を作ったときから変わっていれば、UI を作り直す。
+        /// </summary>
+        private void RebuildIfLanguageChanged()
+        {
+            _rebuildScheduled = false;
+            if (Lang.Current == _builtLanguage)
+            {
+                return;
+            }
+
+            rootVisualElement.Clear();
+            BuildUI();
         }
 
         private void OnDisable()
@@ -176,8 +212,28 @@ namespace TimelineBindingGuardian
 
         private void OnSettingsChanged()
         {
+            if (Lang.Current != _builtLanguage)
+            {
+                ScheduleRebuild();
+                return;
+            }
+
             RefreshCurrentTab();
             UpdateHeader();
+        }
+
+        /// <summary>
+        /// 設定タブの操作（言語の選択）のコールバック中に UI を消さないよう、作り直しは次の更新で行う。
+        /// </summary>
+        private void ScheduleRebuild()
+        {
+            if (_rebuildScheduled)
+            {
+                return;
+            }
+
+            _rebuildScheduled = true;
+            rootVisualElement.schedule.Execute(RebuildIfLanguageChanged);
         }
 
         /// <summary>
@@ -207,26 +263,36 @@ namespace TimelineBindingGuardian
             List<(NotificationRecord Notification, ChangeEvent Event)> unread = history.GetNotifications(false);
             Func<string, LevelValue> current = history.CreateCurrentValueLookup();
             int stillUnbound = unread.Count(n => !NotificationRules.IsResolved(n.Event, current));
-            string monitoring = GuardianSettings.Instance.MonitoringEnabled ? "on" : "OFF";
-            string pending = ScanScheduler.PendingCount > 0
-                ? $"{ScanScheduler.PendingCount} pending{(string.IsNullOrEmpty(ScanScheduler.DeferReason) ? string.Empty : $" ({ScanScheduler.DeferReason})")}"
-                : "none pending";
+            string monitoring = GuardianSettings.Instance.MonitoringEnabled ? Lang.T("window.header.monitoringOn") : Lang.T("window.header.monitoringOff");
+            string pending = FormatPending();
             string last = ScanScheduler.LastProcessedLocal == default ? "-" : ScanScheduler.LastProcessedLocal.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
-            _headerLabel.text = $"Unread notifications: {unread.Count} (still unbound: {stillUnbound})   |   Automatic monitoring: {monitoring}, {pending}, last automatic scan {last}";
+            _headerLabel.text = Lang.T("window.header.summary", unread.Count, stillUnbound, monitoring, pending, last);
             _headerLabel.style.color = unread.Count > 0 ? new StyleColor(AttentionColor) : new StyleColor(StyleKeyword.Null);
             if (!history.Store.IsWritable)
             {
-                _headerLabel.text += $"   |   History is read-only: {history.Store.ErrorMessage}";
+                _headerLabel.text += Lang.T("window.header.readOnly", history.Store.ErrorMessage);
             }
+        }
+
+        private static string FormatPending()
+        {
+            if (ScanScheduler.PendingCount <= 0)
+            {
+                return Lang.T("window.header.nonePending");
+            }
+
+            return string.IsNullOrEmpty(ScanScheduler.DeferReason)
+                ? Lang.T("window.header.pending", ScanScheduler.PendingCount)
+                : Lang.T("window.header.pendingWithReason", ScanScheduler.PendingCount, ScanScheduler.DeferReason);
         }
 
         private VisualElement CreateTabBar()
         {
             Toolbar tabs = new Toolbar();
-            AddTabToggle(tabs, Tab.Notifications, "Notifications");
-            AddTabToggle(tabs, Tab.SceneBindings, "Scene Bindings");
-            AddTabToggle(tabs, Tab.History, "History");
-            AddTabToggle(tabs, Tab.Settings, "Settings");
+            AddTabToggle(tabs, Tab.Notifications, Lang.T("window.tab.notifications"));
+            AddTabToggle(tabs, Tab.SceneBindings, Lang.T("window.tab.sceneBindings"));
+            AddTabToggle(tabs, Tab.History, Lang.T("window.tab.history"));
+            AddTabToggle(tabs, Tab.Settings, Lang.T("window.tab.settings"));
             return tabs;
         }
 
@@ -286,7 +352,7 @@ namespace TimelineBindingGuardian
         private VisualElement CreateToolbar()
         {
             Toolbar toolbar = new Toolbar();
-            ToolbarButton scanButton = new ToolbarButton(OnScanClicked) { text = "Scan Now" };
+            ToolbarButton scanButton = new ToolbarButton(OnScanClicked) { text = Lang.T("window.scanNow") };
             toolbar.Add(scanButton);
 
             EnumField scopeField = new EnumField(_scope);
@@ -298,7 +364,7 @@ namespace TimelineBindingGuardian
             spacer.style.flexGrow = 1;
             toolbar.Add(spacer);
 
-            Label phaseNote = new Label("Observations are recorded to the local history. Saved states only.");
+            Label phaseNote = new Label(Lang.T("window.toolbarNote"));
             phaseNote.style.color = MutedColor;
             phaseNote.style.unityTextAlign = TextAnchor.MiddleRight;
             toolbar.Add(phaseNote);
@@ -310,17 +376,21 @@ namespace TimelineBindingGuardian
             VisualElement pane = new VisualElement();
             pane.style.minWidth = 220;
 
+            // UI を作り直したときも検索とフィルタの状態を引き継ぐ
             ToolbarSearchField search = new ToolbarSearchField();
             search.style.width = StyleKeyword.Auto;
+            search.SetValueWithoutNotify(_searchText);
             search.RegisterValueChangedCallback(OnSearchChanged);
             pane.Add(search);
 
             VisualElement filters = new VisualElement();
             filters.style.flexDirection = FlexDirection.Row;
             filters.style.paddingLeft = 4;
-            Toggle lostToggle = new Toggle("Null / No Entry only");
+            Toggle lostToggle = new Toggle(Lang.T("window.filter.lostOnly"));
+            lostToggle.SetValueWithoutNotify(_lostOnly);
             lostToggle.RegisterValueChangedCallback(OnLostFilterChanged);
-            Toggle undeterminedToggle = new Toggle("Origin undetermined only");
+            Toggle undeterminedToggle = new Toggle(Lang.T("window.filter.undeterminedOnly"));
+            undeterminedToggle.SetValueWithoutNotify(_undeterminedOnly);
             undeterminedToggle.RegisterValueChangedCallback(OnUndeterminedFilterChanged);
             filters.Add(lostToggle);
             filters.Add(undeterminedToggle);
@@ -377,7 +447,7 @@ namespace TimelineBindingGuardian
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                _statusLabel.text = "Scanning is disabled in Play Mode. Only stable Edit Mode states are inspected.";
+                _statusLabel.text = Lang.T("window.status.playMode");
                 return;
             }
 
@@ -407,20 +477,33 @@ namespace TimelineBindingGuardian
         {
             RecordSummary summary = GuardianHistory.Shared.Record(_results, "Manual scan");
             NotificationService.ReportNewNotifications(summary, "Manual scan");
+            _lastRecordSummary = summary;
+        }
+
+        /// <summary>
+        /// 直近の記録結果をステータス表示用の文言にする（表示言語の切り替えに追従するため、表示のたびに作る）。
+        /// </summary>
+        private static string FormatRecordMessage(RecordSummary summary)
+        {
+            if (summary == null)
+            {
+                return string.Empty;
+            }
+
             List<string> parts = new List<string>();
             if (!string.IsNullOrEmpty(summary.Error))
             {
-                parts.Add($"History not saved: {summary.Error}");
+                parts.Add(Lang.T("window.record.notSaved", summary.Error));
             }
             else if (summary.Saved)
             {
                 int lost = summary.NewEvents.Count(e => e.ChangeType == ChangeType.BindingLost);
                 string written = (summary.WrittenBytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
-                parts.Add($"History: {summary.NewEventCount} new event(s), {lost} newly lost (saved {written} KB in {summary.WrittenFileCount} file(s))");
+                parts.Add(Lang.T("window.record.saved", summary.NewEventCount, lost, written, summary.WrittenFileCount));
             }
 
-            parts.AddRange(summary.SkippedReasons.Select(r => $"Not recorded: {r}"));
-            _lastRecordMessage = string.Join("  |  ", parts);
+            parts.AddRange(summary.SkippedReasons.Select(r => Lang.T("window.record.notRecorded", r)));
+            return string.Join("  |  ", parts);
         }
 
         private void UpdateStatus()
@@ -429,10 +512,11 @@ namespace TimelineBindingGuardian
             int trackCount = _results.Sum(r => r.Directors.Sum(d => d.Tracks.Count));
             int lostCount = _results.Sum(r => r.Directors.Sum(d => d.Tracks.Count(IsLost)));
             int unsavedCount = _results.Count(r => !r.IsSaved);
-            string unsaved = unsavedCount > 0 ? $"  |  {unsavedCount} unsaved scene(s): not eligible for history" : string.Empty;
+            string unsaved = unsavedCount > 0 ? Lang.T("window.status.unsaved", unsavedCount) : string.Empty;
             string time = _lastScanLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-            string record = string.IsNullOrEmpty(_lastRecordMessage) ? string.Empty : $"\n{_lastRecordMessage}";
-            _statusLabel.text = $"Last scan: {time}  |  {_results.Count} scene(s), {directorCount} director(s), {trackCount} binding(s), {lostCount} currently Null / No Entry{unsaved}{record}";
+            string recordMessage = FormatRecordMessage(_lastRecordSummary);
+            string record = string.IsNullOrEmpty(recordMessage) ? string.Empty : $"\n{recordMessage}";
+            _statusLabel.text = Lang.T("window.status.summary", time, _results.Count, directorCount, trackCount, lostCount, unsaved, record);
         }
 
         private void RebuildTree()
@@ -478,7 +562,7 @@ namespace TimelineBindingGuardian
                 branch.Directors.Add((director, tracks));
             }
 
-            string sceneLabel = result.Owner.IsSaved ? result.Owner.AssetPathHint : "Untitled (unsaved)";
+            string sceneLabel = result.Owner.IsSaved ? result.Owner.AssetPathHint : Lang.T("window.untitledScene");
             NodeData sceneNode = new NodeData { Kind = NodeKind.Scene, Label = sceneLabel, Scan = result, NeedsAttention = !result.IsSaved };
             return new TreeViewItemData<NodeData>(_nextId++, sceneNode, CreateBranchItems(root, result));
         }
@@ -577,8 +661,8 @@ namespace TimelineBindingGuardian
         private void ShowDetailsPlaceholder()
         {
             _details.Clear();
-            _details.Add(CreateMutedLabel("Select a track to see its binding state at each prefab level."));
-            _details.Add(CreateMutedLabel("Note: a Null binding is not necessarily an error. Parent prefabs may intentionally clear bindings."));
+            _details.Add(CreateMutedLabel(Lang.T("window.details.placeholder")));
+            _details.Add(CreateMutedLabel(Lang.T("window.details.nullNote")));
         }
 
         private void ShowDetails(NodeData node)
@@ -609,9 +693,9 @@ namespace TimelineBindingGuardian
 
         private void ShowSceneDetails(ScanResult result)
         {
-            _details.Add(CreateHeader(result.Owner.IsSaved ? result.Owner.AssetPathHint : "Untitled (unsaved)"));
-            _details.Add(new Label($"Scanned at (UTC): {result.ScannedAtUtc}"));
-            _details.Add(new Label($"Directors: {result.Directors.Count} (including inactive GameObjects and disabled components)"));
+            _details.Add(CreateHeader(result.Owner.IsSaved ? result.Owner.AssetPathHint : Lang.T("window.untitledScene")));
+            _details.Add(new Label(Lang.T("window.scene.scannedAt", result.ScannedAtUtc)));
+            _details.Add(new Label(Lang.T("window.scene.directors", result.Directors.Count)));
             foreach (string diagnostic in result.Diagnostics)
             {
                 _details.Add(CreateWarningLabel(diagnostic));
@@ -621,11 +705,11 @@ namespace TimelineBindingGuardian
         private void ShowDirectorDetails(DirectorObservation director)
         {
             _details.Add(CreateHeader(director.Director.HierarchyPathHint));
-            _details.Add(new Label($"Owner: {director.Owner}"));
-            _details.Add(new Label($"Timeline: {(director.Timeline != null ? director.Timeline.AssetPathHint : "-")}"));
-            _details.Add(new Label($"Active in hierarchy: {director.ActiveInHierarchy}   Component enabled: {director.Enabled}"));
-            _details.Add(new Label($"Bindings: {director.Tracks.Count}  (tracks without a binding type, such as Control and Group, are excluded)"));
-            _details.Add(new Button(() => OnPingDirectorClicked(director)) { text = "Ping Director" });
+            _details.Add(new Label(Lang.T("window.director.owner", director.Owner)));
+            _details.Add(new Label(Lang.T("window.director.timeline", director.Timeline != null ? director.Timeline.AssetPathHint : "-")));
+            _details.Add(new Label(Lang.T("window.director.activeEnabled", director.ActiveInHierarchy, director.Enabled)));
+            _details.Add(new Label(Lang.T("window.director.bindings", director.Tracks.Count)));
+            _details.Add(new Button(() => OnPingDirectorClicked(director)) { text = Lang.T("window.pingDirector") });
             foreach (string diagnostic in director.Diagnostics)
             {
                 _details.Add(CreateWarningLabel(diagnostic));
@@ -635,31 +719,31 @@ namespace TimelineBindingGuardian
         private void ShowTrackDetails(DirectorObservation director, TrackBindingObservation track)
         {
             _details.Add(CreateHeader($"{track.Track.TrackPathHint}  ({track.Track.TrackType} → {track.Track.OutputTargetType})"));
-            _details.Add(new Label($"Director: {director.Director.HierarchyPathHint}"));
-            _details.Add(new Label($"Timeline: {track.Track.TimelinePathHint}"));
-            _details.Add(new Label($"Effective: {FormatState(track.Effective)}"));
+            _details.Add(new Label(Lang.T("window.track.director", director.Director.HierarchyPathHint)));
+            _details.Add(new Label(Lang.T("window.track.timeline", track.Track.TimelinePathHint)));
+            _details.Add(new Label(Lang.T("window.track.effective", FormatState(track.Effective))));
             _details.Add(new Label(FormatOriginSummary(track)));
 
             VisualElement buttons = new VisualElement();
             buttons.style.flexDirection = FlexDirection.Row;
-            buttons.Add(new Button(() => OnPingDirectorClicked(director)) { text = "Ping Director" });
+            buttons.Add(new Button(() => OnPingDirectorClicked(director)) { text = Lang.T("window.pingDirector") });
             // Prefab Mode では開いている階層の値を Ping するため、どこかの階層に対象があれば押せるようにする
-            Button pingTarget = new Button(() => OnPingTargetClicked(track)) { text = "Ping Target" };
+            Button pingTarget = new Button(() => OnPingTargetClicked(track)) { text = Lang.T("window.pingTarget") };
             pingTarget.SetEnabled(track.Levels.Any(l => !l.Target.IsNone));
             buttons.Add(pingTarget);
             if (track.Origin != null && track.Origin.Owner.AssetKind != AssetKind.Scene)
             {
                 LevelBindingState origin = track.Origin;
-                buttons.Add(new Button(() => OpenAsset(origin.Owner.AssetPathHint)) { text = "Open Origin Prefab" });
+                buttons.Add(new Button(() => OpenAsset(origin.Owner.AssetPathHint)) { text = Lang.T("window.openOriginPrefab") });
             }
 
             _details.Add(buttons);
 
-            _details.Add(CreateHeader("Levels (definition → … → current context)"));
-            _details.Add(CreateLevelRow(true, null));
+            _details.Add(CreateHeader(Lang.T("window.levels.header")));
+            _details.Add(CreateLevelRow(true, null, null));
             for (int i = track.Levels.Count - 1; i >= 0; i--)
             {
-                _details.Add(CreateLevelRow(false, track.Levels[i]));
+                _details.Add(CreateLevelRow(false, track.Levels[i], track.Track));
             }
 
             AddTrackHistory(director, track);
@@ -674,28 +758,29 @@ namespace TimelineBindingGuardian
                 .Where(e => e.ChangeType != ChangeType.Initial)
                 .ToList();
 
-            _details.Add(CreateHeader("History"));
+            _details.Add(CreateHeader(Lang.T("window.history.header")));
             if (events.Count == 0)
             {
-                _details.Add(CreateMutedLabel("No changes recorded for this binding since the first observation. Bindings that were already broken before the first scan cannot be detected."));
+                _details.Add(CreateMutedLabel(Lang.T("window.history.none")));
             }
             else
             {
                 ChangeEvent latest = events[0];
                 AffectedContext context = latest.AffectedContexts.FirstOrDefault(c => c.ContextBindingKey == track.BindingKey);
+                string ownerName = System.IO.Path.GetFileName(latest.Owner.AssetPathHint);
                 string previous = context != null
-                    ? $"Previous effective value: {HistoryView.FormatValue(context.EffectiveBefore)} → {HistoryView.FormatValue(context.EffectiveAfter)}"
-                    : $"Previous value at {System.IO.Path.GetFileName(latest.Owner.AssetPathHint)}: {HistoryView.FormatValue(latest.Before)} → {HistoryView.FormatValue(latest.After)}";
-                _details.Add(new Label($"Last change: {latest.ChangeType} at {System.IO.Path.GetFileName(latest.Owner.AssetPathHint)} (observed {HistoryView.FormatLocalTime(latest.ObservedAtUtc)})"));
+                    ? Lang.T("window.history.previousEffective", HistoryView.FormatValue(context.EffectiveBefore), HistoryView.FormatValue(context.EffectiveAfter))
+                    : Lang.T("window.history.previousAt", ownerName, HistoryView.FormatValue(latest.Before), HistoryView.FormatValue(latest.After));
+                _details.Add(new Label(Lang.T("window.history.lastChange", latest.ChangeType, ownerName, HistoryView.FormatLocalTime(latest.ObservedAtUtc))));
                 _details.Add(new Label(previous));
-                _details.Add(new Label($"{events.Count} recorded change(s) related to this binding."));
+                _details.Add(new Label(Lang.T("window.history.count", events.Count)));
             }
 
-            string label = $"{GetLeafName(track.Track.TrackPathHint)} on {director.Director.HierarchyPathHint}";
-            Button showHistory = new Button(() => OnShowHistoryClicked(track.BindingKey, ownerLevelKeys, label)) { text = "Show History" };
+            string label = Lang.T("window.history.contextLabel", GetLeafName(track.Track.TrackPathHint), director.Director.HierarchyPathHint);
+            Button showHistory = new Button(() => OnShowHistoryClicked(track.BindingKey, ownerLevelKeys, label)) { text = Lang.T("window.showHistory") };
             showHistory.style.alignSelf = Align.FlexStart;
             _details.Add(showHistory);
-            _details.Add(CreateMutedLabel("Times shown are observation times, not when the change was actually made."));
+            _details.Add(CreateMutedLabel(Lang.T("window.history.timeNote")));
         }
 
         private void OnShowHistoryClicked(string bindingKey, List<string> ownerLevelKeys, string label)
@@ -704,7 +789,7 @@ namespace TimelineBindingGuardian
             _historyView.ShowContext(bindingKey, ownerLevelKeys, label);
         }
 
-        private VisualElement CreateLevelRow(bool isHeader, LevelBindingState level)
+        private VisualElement CreateLevelRow(bool isHeader, LevelBindingState level, TrackLocator track)
         {
             VisualElement row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
@@ -712,7 +797,15 @@ namespace TimelineBindingGuardian
             row.style.paddingBottom = 2;
 
             string[] cells = isHeader
-                ? new[] { "Asset", "Context", "Local State", "Value", "Override", "Role" }
+                ? new[]
+                {
+                    Lang.T("window.levels.asset"),
+                    Lang.T("window.levels.context"),
+                    Lang.T("window.levels.localState"),
+                    Lang.T("window.levels.value"),
+                    Lang.T("window.levels.override"),
+                    Lang.T("window.levels.role"),
+                }
                 : new[]
                 {
                     System.IO.Path.GetFileName(level.Owner.AssetPathHint),
@@ -722,7 +815,7 @@ namespace TimelineBindingGuardian
                     FormatOverride(level),
                     FormatRole(level),
                 };
-            float[] widths = { 150, 120, 110, 260, 120, 210 };
+            float[] widths = { 140, 110, 105, 220, 110, 170 };
             for (int i = 0; i < cells.Length; i++)
             {
                 Label cell = new Label(cells[i]);
@@ -748,19 +841,33 @@ namespace TimelineBindingGuardian
             if (level.Owner.AssetKind != AssetKind.Scene)
             {
                 string path = level.Owner.AssetPathHint;
-                Button open = new Button(() => OpenAsset(path)) { text = "Open" };
+                Button open = new Button(() => OpenAsset(path)) { text = Lang.T("window.open") };
                 row.Add(open);
+            }
+
+            // この階層で値を Override している行（NULL の上書きを含む）は、その Override を外して継承に戻せる
+            bool isOverriddenHere = level.ValueOverridden && level.LocalState == LocalState.ExplicitOverride;
+            if (isOverriddenHere)
+            {
+                Button remove = new Button(() => OnRemoveOverrideClicked(level, track)) { text = Lang.T("window.removeOverride") };
+                remove.tooltip = Lang.T("window.removeOverride.tooltip");
+                row.Add(remove);
             }
 
             row.tooltip = string.IsNullOrEmpty(level.Note) ? level.Owner.AssetPathHint : $"{level.Owner.AssetPathHint}\n{level.Note}";
             return row;
         }
 
+        private static void OnRemoveOverrideClicked(LevelBindingState level, TrackLocator track)
+        {
+            RestorePreviewWindow.OpenRemoveOverride(level, track);
+        }
+
         private static string FormatTrackLabel(TrackBindingObservation track)
         {
             string name = GetLeafName(track.Track.TrackPathHint);
-            string origin = track.Origin != null ? System.IO.Path.GetFileName(track.Origin.Owner.AssetPathHint) : "undetermined";
-            return $"{name}  —  {FormatValueState(track.Effective.ValueState)}  (origin: {origin})";
+            string origin = track.Origin != null ? System.IO.Path.GetFileName(track.Origin.Owner.AssetPathHint) : Lang.T("window.origin.undeterminedShort");
+            return Lang.T("window.trackLabel", name, FormatValueState(track.Effective.ValueState), origin);
         }
 
         private static string FormatDirectorState(DirectorObservation director)
@@ -768,12 +875,12 @@ namespace TimelineBindingGuardian
             List<string> flags = new List<string>();
             if (!director.ActiveInHierarchy)
             {
-                flags.Add("inactive");
+                flags.Add(Lang.T("window.directorState.inactive"));
             }
 
             if (!director.Enabled)
             {
-                flags.Add("disabled");
+                flags.Add(Lang.T("window.directorState.disabled"));
             }
 
             return flags.Count > 0 ? $"  ({string.Join(", ", flags)})" : string.Empty;
@@ -809,10 +916,10 @@ namespace TimelineBindingGuardian
         {
             if (level.StructuralOverride)
             {
-                return level.ValueOverridden ? "Yes (array shift)" : "Yes (entry removed)";
+                return level.ValueOverridden ? Lang.T("window.override.arrayShift") : Lang.T("window.override.entryRemoved");
             }
 
-            return level.ValueOverridden ? "Yes" : "-";
+            return level.ValueOverridden ? Lang.T("window.override.yes") : "-";
         }
 
         private static string FormatRole(LevelBindingState level)
@@ -820,11 +927,11 @@ namespace TimelineBindingGuardian
             switch (level.Role)
             {
                 case LevelRole.Origin:
-                    return "Origin of effective value";
+                    return Lang.T("window.role.origin");
                 case LevelRole.Shadowed:
-                    return "Changed, but overridden above";
+                    return Lang.T("window.role.shadowed");
                 default:
-                    return level.ChangedAtThisLevel ? "Changed" : string.Empty;
+                    return level.ChangedAtThisLevel ? Lang.T("window.role.changed") : string.Empty;
             }
         }
 
@@ -832,13 +939,14 @@ namespace TimelineBindingGuardian
         {
             if (track.OriginKind == OriginKind.Undetermined)
             {
-                return "Origin: undetermined (a level could not be classified).";
+                return Lang.T("window.origin.undetermined");
             }
 
             LevelBindingState origin = track.Origin;
-            string where = origin.Owner.IsSaved ? origin.Owner.AssetPathHint : "unsaved scene";
-            string how = origin.LocalState == LocalState.DefinedHere ? "defined" : "overridden";
-            return $"Origin: {where} ({how} at this level)";
+            string where = origin.Owner.IsSaved ? origin.Owner.AssetPathHint : Lang.T("window.origin.unsavedScene");
+            // 語順が言語で変わるため、「定義」と「Override」で文全体を分ける
+            string key = origin.LocalState == LocalState.DefinedHere ? "window.origin.defined" : "window.origin.overridden";
+            return Lang.T(key, where);
         }
 
         private void OnPingDirectorClicked(DirectorObservation director)
@@ -880,7 +988,7 @@ namespace TimelineBindingGuardian
             {
                 if (track.Effective.Target.IsNone)
                 {
-                    _statusLabel.text = $"No target to ping: the effective value is {FormatValueState(track.Effective.ValueState)}.";
+                    _statusLabel.text = Lang.T("window.ping.noTarget", FormatValueState(track.Effective.ValueState));
                     return;
                 }
 
@@ -891,7 +999,7 @@ namespace TimelineBindingGuardian
             if (level.Target.IsNone)
             {
                 string prefabName = System.IO.Path.GetFileName(level.Owner.AssetPathHint);
-                _statusLabel.text = $"No target to ping in the open prefab: the value at {prefabName} is {FormatValueState(level.ValueState)}.";
+                _statusLabel.text = Lang.T("window.ping.noTargetInPrefab", prefabName, FormatValueState(level.ValueState));
                 return;
             }
 
@@ -920,11 +1028,12 @@ namespace TimelineBindingGuardian
             Object assetObject = ResolveObject(assetGlobalObjectId);
             if (!PrefabStageLocator.TryFindInOpenPrefabStage(assetObject, out Object stageObject))
             {
-                _statusLabel.text = $"The {label} could not be located in the open prefab (it may have unsaved structural changes). Showing it in the scene instead.";
+                // label は "director" か "target"（言語ごとに名詞の訳が変わるため文全体をキーで分ける）
+                _statusLabel.text = Lang.T($"window.ping.notInPrefab.{label}");
                 return false;
             }
 
-            EditorGUIUtility.PingObject(stageObject);
+            PingUtility.Ping(stageObject);
             return true;
         }
 
@@ -946,7 +1055,7 @@ namespace TimelineBindingGuardian
             Object target = ResolveObject(globalObjectId);
             if (target == null)
             {
-                _statusLabel.text = "The object could not be found. The scene may have been closed or changed. Press \"Scan Now\" again.";
+                _statusLabel.text = Lang.T("window.ping.objectNotFound", Lang.T("window.scanNow"));
                 return;
             }
 
@@ -954,16 +1063,16 @@ namespace TimelineBindingGuardian
             bool isInPrefabMode = PrefabStageUtility.GetCurrentPrefabStage() != null;
             if (!isSceneObject || !isInPrefabMode)
             {
-                EditorGUIUtility.PingObject(target);
+                PingUtility.Ping(target);
                 return;
             }
 
             // Prefab Mode 中は Hierarchy に Scene が表示されないため、ユーザーの確認を得てから Scene に戻る
             bool confirmed = EditorUtility.DisplayDialog(
                 "Timeline Binding Guardian",
-                "Prefab Mode is open, so the object cannot be shown in the Hierarchy.\nReturn to the scene and ping it?",
-                "Return to Scene",
-                "Cancel");
+                Lang.T("window.dialog.returnToScene.message"),
+                Lang.T("window.dialog.returnToScene.ok"),
+                Lang.T("window.dialog.cancel"));
             if (!confirmed)
             {
                 return;
@@ -985,7 +1094,7 @@ namespace TimelineBindingGuardian
             Object target = ResolveObject(globalObjectId);
             if (target != null)
             {
-                EditorGUIUtility.PingObject(target);
+                PingUtility.Ping(target);
             }
         }
 

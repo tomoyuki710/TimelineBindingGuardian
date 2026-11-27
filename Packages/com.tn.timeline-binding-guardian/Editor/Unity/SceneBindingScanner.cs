@@ -40,7 +40,7 @@ namespace TimelineBindingGuardian
             AssetLocator owner = PrefabContextResolver.CreateSceneLocator(scene);
             if (!owner.IsSaved)
             {
-                diagnostics.Add("Scene is not saved. Stable IDs are unavailable, so this scene is excluded from persistent history.");
+                diagnostics.Add(Lang.T("engine.scan.unsavedScene"));
             }
 
             List<DirectorObservation> directors = new List<DirectorObservation>();
@@ -54,7 +54,7 @@ namespace TimelineBindingGuardian
 
             if (scene.isDirty)
             {
-                diagnostics.Add("Scene has unsaved changes. History records saved states only, so this scan is not recorded.");
+                diagnostics.Add(Lang.T("engine.scan.dirtyScene"));
             }
 
             return new ScanResult(owner, GetUtcNow(), directors, diagnostics, scene.isDirty);
@@ -70,7 +70,7 @@ namespace TimelineBindingGuardian
             GameObject root = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
             if (root == null)
             {
-                diagnostics.Add($"Prefab asset could not be loaded: {assetPath}");
+                diagnostics.Add(Lang.T("engine.scan.prefabLoadFailed", assetPath));
             }
             else
             {
@@ -94,7 +94,7 @@ namespace TimelineBindingGuardian
             TimelineAsset timeline = director.playableAsset as TimelineAsset;
             if (timeline == null)
             {
-                string reason = director.playableAsset == null ? "No playable asset is assigned." : "Playable asset is not a TimelineAsset.";
+                string reason = director.playableAsset == null ? Lang.T("engine.scan.noPlayableAsset") : Lang.T("engine.scan.notTimelineAsset");
                 diagnostics.Add(reason);
                 return new DirectorObservation(locator, owner, null, director.gameObject.activeInHierarchy, director.enabled, instanceChain, tracks, diagnostics);
             }
@@ -155,7 +155,7 @@ namespace TimelineBindingGuardian
             if (director.playableAsset != timeline)
             {
                 return new LevelBindingState(level, owner, contextKind, directorLocator, ValueState.NotApplicable, LocalState.NotApplicable,
-                    TargetLocator.None, false, false, false, null, "A different playable asset is assigned at this level.");
+                    TargetLocator.None, false, false, false, null, Lang.T("engine.level.differentPlayableAsset"));
             }
 
             ValueState valueState = GetValueState(table, track, out BindingEntry entry);
@@ -168,7 +168,7 @@ namespace TimelineBindingGuardian
                 LocalState baseState = contextKind == ContextKind.SceneInstance || contextKind == ContextKind.PrefabInstance
                     ? LocalState.Unknown
                     : LocalState.DefinedHere;
-                string baseNote = baseState == LocalState.Unknown ? "Source object could not be resolved." : string.Empty;
+                string baseNote = baseState == LocalState.Unknown ? Lang.T("engine.level.sourceUnresolved") : string.Empty;
                 return new LevelBindingState(level, owner, contextKind, directorLocator, valueState, baseState,
                     CreateTarget(valueState, entry), valueOverridden, false, false, evidence, baseNote);
             }
@@ -176,7 +176,7 @@ namespace TimelineBindingGuardian
             if (source.playableAsset != timeline)
             {
                 return new LevelBindingState(level, owner, contextKind, directorLocator, valueState, LocalState.Unknown,
-                    CreateTarget(valueState, entry), valueOverridden, false, true, evidence, "The playable asset differs from the lower level.");
+                    CreateTarget(valueState, entry), valueOverridden, false, true, evidence, Lang.T("engine.level.playableAssetDiffers"));
             }
 
             ValueState sourceState = GetValueState(sourceTable, track, out BindingEntry sourceEntry);
@@ -199,7 +199,7 @@ namespace TimelineBindingGuardian
             note = string.Empty;
             if (valueState == ValueState.Unknown)
             {
-                note = "Duplicate binding entries for the same track.";
+                note = Lang.T("engine.level.duplicateEntries");
                 return LocalState.Unknown;
             }
 
@@ -207,7 +207,7 @@ namespace TimelineBindingGuardian
             {
                 if (valueOverridden)
                 {
-                    note = "Overridden by an array shift, but the value is the same as the lower level.";
+                    note = Lang.T("engine.level.arrayShift");
                 }
 
                 return LocalState.Inherited;
@@ -217,11 +217,11 @@ namespace TimelineBindingGuardian
             {
                 if (sizeOverridden)
                 {
-                    note = "The binding entry was removed at this level (array size override).";
+                    note = Lang.T("engine.level.entryRemovedHere");
                     return LocalState.ExplicitOverride;
                 }
 
-                note = "The binding entry is missing at this level, but no override evidence was found.";
+                note = Lang.T("engine.level.entryMissingNoEvidence");
                 return LocalState.Unknown;
             }
 
@@ -230,7 +230,7 @@ namespace TimelineBindingGuardian
                 return LocalState.ExplicitOverride;
             }
 
-            note = "The value differs from the lower level, but no override evidence was found.";
+            note = Lang.T("engine.level.valueDiffersNoEvidence");
             return LocalState.Unknown;
         }
 
@@ -324,17 +324,17 @@ namespace TimelineBindingGuardian
             string owner = PrefabContextResolver.GetOwner(director).ToString();
             if (!table.ArrayFound)
             {
-                diagnostics.Add($"L{level} {owner}: m_SceneBindings was not found.");
+                diagnostics.Add(Lang.T("engine.scan.sceneBindingsNotFound", level, owner));
             }
 
             if (table.StaleKeyCount > 0)
             {
-                diagnostics.Add($"L{level} {owner}: {table.StaleKeyCount} stale binding key(s) (deleted tracks).");
+                diagnostics.Add(Lang.T("engine.scan.staleKeys", level, owner, table.StaleKeyCount));
             }
 
             if (table.NullKeyCount > 0)
             {
-                diagnostics.Add($"L{level} {owner}: {table.NullKeyCount} binding entry(ies) with a null key.");
+                diagnostics.Add(Lang.T("engine.scan.nullKeys", level, owner, table.NullKeyCount));
             }
         }
 

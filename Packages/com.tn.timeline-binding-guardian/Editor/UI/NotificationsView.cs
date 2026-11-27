@@ -40,15 +40,15 @@ namespace TimelineBindingGuardian
             Root.style.flexGrow = 1;
 
             Toolbar bar = new Toolbar();
-            ToolbarToggle dismissedToggle = new ToolbarToggle { text = "Show dismissed" };
+            ToolbarToggle dismissedToggle = new ToolbarToggle { text = Lang.T("views.notifications.showDismissed") };
             dismissedToggle.RegisterValueChangedCallback(OnShowDismissedChanged);
             bar.Add(dismissedToggle);
             ToolbarSearchField search = new ToolbarSearchField();
-            search.tooltip = "Search prefab, scene, director, or track";
+            search.tooltip = Lang.T("views.notifications.search.tooltip");
             search.RegisterValueChangedCallback(OnSearchChanged);
             bar.Add(search);
-            bar.Add(new ToolbarButton(OnDismissShownClicked) { text = "Dismiss Shown", tooltip = "Dismiss the unread notifications currently listed." });
-            bar.Add(new ToolbarButton(OnDismissAllClicked) { text = "Dismiss All…", tooltip = "Dismiss every unread notification (asks for confirmation)." });
+            bar.Add(new ToolbarButton(OnDismissShownClicked) { text = Lang.T("views.notifications.dismissShown"), tooltip = Lang.T("views.notifications.dismissShown.tooltip") });
+            bar.Add(new ToolbarButton(OnDismissAllClicked) { text = Lang.T("views.notifications.dismissAll"), tooltip = Lang.T("views.notifications.dismissAll.tooltip") });
             ToolbarSpacer spacer = new ToolbarSpacer();
             spacer.style.flexGrow = 1;
             bar.Add(spacer);
@@ -64,10 +64,10 @@ namespace TimelineBindingGuardian
             _filterLabel = new Label();
             _filterLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
             _filterRow.Add(_filterLabel);
-            _filterRow.Add(new Button(OnClearFilterClicked) { text = "Clear" });
+            _filterRow.Add(new Button(OnClearFilterClicked) { text = Lang.T("views.common.clear") });
             Root.Add(_filterRow);
 
-            _statusLabel = CreateMutedLabel("A notification means a binding became unbound. It is not necessarily an error (a parent prefab may clear it on purpose). Dismissing does not mark the binding as correct.");
+            _statusLabel = CreateMutedLabel(Lang.T("views.notifications.intro"));
             Root.Add(_statusLabel);
 
             TwoPaneSplitView split = new TwoPaneSplitView(0, 240, TwoPaneSplitViewOrientation.Vertical);
@@ -98,7 +98,7 @@ namespace TimelineBindingGuardian
             _visible.Clear();
             _visible.AddRange(all.Where(Matches));
             int unread = all.Count(n => n.Notification.IsUnread);
-            _countLabel.text = $"{_visible.Count} shown, {unread} unread";
+            _countLabel.text = Lang.T("views.notifications.count", _visible.Count, unread);
             _listView.ClearSelection();
             _listView.RefreshItems();
             ShowDetails(null);
@@ -110,7 +110,7 @@ namespace TimelineBindingGuardian
         public void ShowEvents(IEnumerable<string> eventIds, string label)
         {
             _eventFilter = new HashSet<string>(eventIds);
-            _filterLabel.text = $"Showing notifications for: {label}";
+            _filterLabel.text = Lang.T("views.notifications.filter", label);
             _filterRow.style.display = DisplayStyle.Flex;
             Refresh();
         }
@@ -165,8 +165,8 @@ namespace TimelineBindingGuardian
             }
 
             bool confirmed = EditorUtility.DisplayDialog("Timeline Binding Guardian",
-                $"Dismiss all {unread.Count} unread notification(s)?\nHistory and current bindings are not changed, and future changes are still notified.",
-                "Dismiss All", "Cancel");
+                Lang.T("views.notifications.dismissAll.confirm", unread.Count),
+                Lang.T("views.notifications.dismissAll.ok"), Lang.T("views.common.cancel"));
             if (confirmed)
             {
                 Dismiss(unread);
@@ -187,7 +187,7 @@ namespace TimelineBindingGuardian
 
             if (!GuardianHistory.Shared.Dismiss(eventIds, out string error))
             {
-                _statusLabel.text = $"Notifications could not be dismissed: {error}";
+                _statusLabel.text = Lang.T("views.notifications.dismissFailed", error);
                 _statusLabel.style.color = AttentionColor;
             }
         }
@@ -226,24 +226,24 @@ namespace TimelineBindingGuardian
             List<string> flags = new List<string>();
             if (!notification.IsUnread)
             {
-                flags.Add("dismissed");
+                flags.Add(Lang.T("views.notifications.flag.dismissed"));
             }
 
             if (resolved)
             {
-                flags.Add("resolved now");
+                flags.Add(Lang.T("views.notifications.flag.resolved"));
             }
 
             if (changeEvent.OriginUndetermined)
             {
-                flags.Add("origin undetermined");
+                flags.Add(Lang.T("views.common.impact.originUndetermined"));
             }
 
-            flags.Add(changeEvent.AffectsEffective ? $"affects {changeEvent.AffectedContexts.Count} context(s)" : "no effect on observed contexts");
+            flags.Add(changeEvent.AffectsEffective ? Lang.T("views.common.impact.affects", changeEvent.AffectedContexts.Count) : Lang.T("views.common.impact.noEffect"));
             int unscanned = GetUnscannedScenes(changeEvent).Count;
             if (unscanned > 0)
             {
-                flags.Add($"{unscanned} scene(s) not scanned yet");
+                flags.Add(Lang.T("views.notifications.flag.unscanned", unscanned));
             }
 
             string time = HistoryView.FormatLocalTime(changeEvent.ObservedAtUtc);
@@ -267,7 +267,7 @@ namespace TimelineBindingGuardian
             _details.Clear();
             if (item == null)
             {
-                _details.Add(CreateMutedLabel("Select a notification to see details."));
+                _details.Add(CreateMutedLabel(Lang.T("views.notifications.selectPrompt")));
                 return;
             }
 
@@ -275,20 +275,20 @@ namespace TimelineBindingGuardian
             ChangeEvent changeEvent = item.Value.Event;
             bool resolved = NotificationRules.IsResolved(changeEvent, _currentValue);
 
-            _details.Add(CreateHeader($"Newly unbound binding (observed {HistoryView.FormatLocalTime(changeEvent.ObservedAtUtc)})"));
-            _details.Add(new Label($"Changed at: {changeEvent.Owner} ({changeEvent.Owner.AssetKind})"));
-            _details.Add(new Label($"Director: {changeEvent.Director.HierarchyPathHint}"));
-            _details.Add(new Label($"Track: {changeEvent.Track.TrackPathHint}   Timeline: {changeEvent.Track.TimelinePathHint}"));
-            _details.Add(new Label($"Value at that level: {HistoryView.FormatValue(changeEvent.Before)} → {HistoryView.FormatValue(changeEvent.After)}"));
-            _details.Add(new Label(resolved ? "Current state: bound again (resolved). The notification stays until dismissed." : "Current state: still unbound."));
+            _details.Add(CreateHeader(Lang.T("views.notifications.details.header", HistoryView.FormatLocalTime(changeEvent.ObservedAtUtc))));
+            _details.Add(new Label(Lang.T("views.common.changedAt", changeEvent.Owner, changeEvent.Owner.AssetKind)));
+            _details.Add(new Label(Lang.T("views.common.director", changeEvent.Director.HierarchyPathHint)));
+            _details.Add(new Label(Lang.T("views.common.trackTimeline", changeEvent.Track.TrackPathHint, changeEvent.Track.TimelinePathHint)));
+            _details.Add(new Label(Lang.T("views.common.valueAtLevel", HistoryView.FormatValue(changeEvent.Before), HistoryView.FormatValue(changeEvent.After))));
+            _details.Add(new Label(resolved ? Lang.T("views.notifications.state.resolved") : Lang.T("views.notifications.state.unbound")));
             if (!notification.IsUnread)
             {
-                _details.Add(CreateMutedLabel($"Dismissed at {HistoryView.FormatLocalTime(notification.DismissedAtUtc)}."));
+                _details.Add(CreateMutedLabel(Lang.T("views.notifications.dismissedAt", HistoryView.FormatLocalTime(notification.DismissedAtUtc))));
             }
 
             if (changeEvent.OriginUndetermined)
             {
-                _details.Add(CreateWarningLabel("Origin undetermined: the level that caused this change could not be identified."));
+                _details.Add(CreateWarningLabel(Lang.T("views.common.originUndetermined")));
             }
 
             AddButtons(notification, changeEvent);
@@ -303,27 +303,29 @@ namespace TimelineBindingGuardian
             if (notification.IsUnread)
             {
                 string eventId = changeEvent.EventId;
-                buttons.Add(new Button(() => OnDismissOneClicked(eventId)) { text = "Dismiss" });
+                buttons.Add(new Button(() => OnDismissOneClicked(eventId)) { text = Lang.T("views.notifications.dismiss") });
             }
 
             bool isPrefab = changeEvent.Owner.AssetKind != AssetKind.Scene;
             if (isPrefab)
             {
                 string path = changeEvent.Owner.AssetPathHint;
-                buttons.Add(new Button(() => OpenAsset(path)) { text = "Open Prefab" });
+                buttons.Add(new Button(() => OpenAsset(path)) { text = Lang.T("views.common.openPrefab") });
             }
 
             string timelinePath = changeEvent.Track.TimelinePathHint;
-            buttons.Add(new Button(() => PingAsset(timelinePath)) { text = "Ping Timeline" });
+            buttons.Add(new Button(() => PingAsset(timelinePath)) { text = Lang.T("views.notifications.pingTimeline") });
+            ChangeEvent captured = changeEvent;
+            buttons.Add(new Button(() => RestorePreviewWindow.Open(captured)) { text = Lang.T("views.notifications.restorePreview") });
             _details.Add(buttons);
         }
 
         private void AddAffected(ChangeEvent changeEvent)
         {
-            _details.Add(CreateHeader($"Effective value in observed contexts ({changeEvent.AffectedContexts.Count})"));
+            _details.Add(CreateHeader(Lang.T("views.common.effectiveHeader", changeEvent.AffectedContexts.Count)));
             if (changeEvent.AffectedContexts.Count == 0)
             {
-                _details.Add(CreateMutedLabel("No observed context changed its effective value (for example, an upper level overrides this binding, or no scene using it has been scanned yet)."));
+                _details.Add(CreateMutedLabel(Lang.T("views.notifications.noAffected")));
                 return;
             }
 
@@ -342,13 +344,13 @@ namespace TimelineBindingGuardian
                 return;
             }
 
-            _details.Add(CreateHeader($"Scenes that may be affected but have not been scanned since this change ({unscanned.Count})"));
+            _details.Add(CreateHeader(Lang.T("views.notifications.unscannedHeader", unscanned.Count)));
             foreach (string scene in unscanned)
             {
                 _details.Add(new Label(scene));
             }
 
-            _details.Add(CreateMutedLabel("These scenes are checked automatically when they are opened."));
+            _details.Add(CreateMutedLabel(Lang.T("views.notifications.unscannedNote")));
         }
 
         /// <summary>
@@ -385,7 +387,7 @@ namespace TimelineBindingGuardian
             Object asset = AssetDatabase.LoadAssetAtPath<Object>(assetPath);
             if (asset != null)
             {
-                EditorGUIUtility.PingObject(asset);
+                PingUtility.Ping(asset);
             }
         }
 

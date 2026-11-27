@@ -97,15 +97,15 @@ namespace TimelineBindingGuardian
             reason = string.Empty;
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
             {
-                reason = "Waiting for compilation or asset import to finish.";
+                reason = Lang.T("engine.defer.compiling");
             }
             else if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                reason = "Deferred during Play Mode.";
+                reason = Lang.T("engine.defer.playMode");
             }
             else if (BindingChangeMonitor.IsSuspended)
             {
-                reason = "Monitoring is suspended.";
+                reason = Lang.T("engine.defer.suspended");
             }
 
             return reason.Length == 0;
@@ -119,7 +119,7 @@ namespace TimelineBindingGuardian
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"[Timeline Binding Guardian] Automatic scan of '{request.Path}' failed and was skipped: {exception.Message}");
+                Debug.LogWarning(Lang.T("engine.warning.autoScanFailed", request.Path, exception.Message));
             }
         }
 
@@ -178,7 +178,7 @@ namespace TimelineBindingGuardian
         /// </summary>
         private static void EnqueueDependents(string assetPath, string reason)
         {
-            string derivedReason = $"{reason} (depends on {System.IO.Path.GetFileName(assetPath)})";
+            string derivedReason = Lang.T("engine.reason.dependsOn", reason, System.IO.Path.GetFileName(assetPath));
             List<string> scopes = DependencyIndex.GetDependentScopePaths(assetPath, GuardianHistory.Shared.Store.State.Scopes);
             foreach (string scope in scopes.Where(p => p.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)))
             {
@@ -197,7 +197,7 @@ namespace TimelineBindingGuardian
             LastProcessedLocal = DateTime.Now;
             if (!string.IsNullOrEmpty(summary.Error))
             {
-                Debug.LogWarning($"[Timeline Binding Guardian] History was not saved: {summary.Error}");
+                Debug.LogWarning(Lang.T("engine.warning.historyNotSaved", summary.Error));
             }
 
             NotificationService.ReportNewNotifications(summary, request.Reason);

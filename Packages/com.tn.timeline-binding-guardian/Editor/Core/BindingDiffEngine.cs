@@ -158,7 +158,7 @@ namespace TimelineBindingGuardian
             // 初回は基点として保存するだけ。初回から NULL のバインドは通知対象にしない（仕様 7.3）
             ChangeEvent initial = CreateEvent(observation, ChangeType.Initial, observation.ScopeGuid, CreateScopeLocator(observation),
                 EmptyDirector(), EmptyTrack(), LevelValue.None, LevelValue.None, false,
-                $"Initial observation: {observation.Contexts.Count} binding(s).");
+                Lang.Note("engine.note.initial", observation.Contexts.Count));
             AddNewEvent(state, result, initial);
         }
 
@@ -199,7 +199,7 @@ namespace TimelineBindingGuardian
                 changed.Add(pair.Key);
                 ContextSnapshot previous = previousContexts.First(c => c.DirectorGlobalObjectId == pair.Key);
                 ContextSnapshot current = observation.Contexts.First(c => c.DirectorGlobalObjectId == pair.Key);
-                string note = $"Timeline: {previous.Track.TimelinePathHint} -> {current.Track.TimelinePathHint}";
+                string note = Lang.Note("engine.note.timelineChanged", previous.Track.TimelinePathHint, current.Track.TimelinePathHint);
                 AddNewEvent(state, result, CreateEvent(observation, ChangeType.TimelineChanged, pair.Key, CreateScopeLocator(observation),
                     current.Director, current.Track, LevelValue.None, LevelValue.None, false, note));
             }
@@ -303,7 +303,7 @@ namespace TimelineBindingGuardian
                 {
                     previous.SetUnknownSince(observation.ObservedAtUtc);
                     ChangeEvent unresolved = CreateEvent(observation, ChangeType.Unresolved, current.BindingKey, CreateScopeLocator(observation),
-                        current.Director, current.Track, previous.Effective, LevelValue.None, true, "The binding could not be classified. The last certain value is kept.");
+                        current.Director, current.Track, previous.Effective, LevelValue.None, true, Lang.Note("engine.note.unresolved"));
                     unresolved.AddAffectedContext(CreateAffected(observation, previous, current, string.Empty));
                     AddNewEvent(state, result, unresolved);
                 }
@@ -313,7 +313,7 @@ namespace TimelineBindingGuardian
 
             string note = string.IsNullOrEmpty(previous.UnknownSinceUtc)
                 ? string.Empty
-                : $"The state was unknown since {previous.UnknownSinceUtc}; changes during that period may not have been observed.";
+                : Lang.Note("engine.note.unknownPeriod", previous.UnknownSinceUtc);
             current.SetObservation(observation.ObservationId, observation.ObservedAtUtc);
             state.Contexts[state.Contexts.IndexOf(previous)] = current.CreateStorageCopy();
 
@@ -328,7 +328,7 @@ namespace TimelineBindingGuardian
             {
                 ChangeEvent undetermined = CreateEvent(observation, Classify(previous.Effective, current.Effective), current.BindingKey,
                     CreateScopeLocator(observation), current.Director, current.Track, previous.Effective, current.Effective, true,
-                    "The level that caused this change could not be determined.");
+                    Lang.Note("engine.note.originUndetermined"));
                 undetermined.AddAffectedContext(affected);
                 AddNewEvent(state, result, undetermined);
                 return;

@@ -85,13 +85,34 @@ namespace TimelineBindingGuardian
         /// </summary>
         public static string BuildPlayground()
         {
-            string folder = $"{Root}/{PlaygroundFolderName}";
+            return BuildNamedSet(PlaygroundFolderName);
+        }
+
+        /// <summary>
+        /// 書き換えを伴うテスト（復元）用の素材を Assets/TBGTestFixtures/Mutable/ に生成する（既にあれば何もしない）。
+        /// テストは「変更して元に戻す」往復で初期状態を保つ。
+        /// </summary>
+        public static string BuildMutable()
+        {
+            return BuildNamedSet(MutableFolderName);
+        }
+
+        public const string MutableFolderName = "Mutable";
+
+        public static string PathIn(string folderName, string fileName)
+        {
+            return $"{Root}/{folderName}/{fileName}";
+        }
+
+        private static string BuildNamedSet(string folderName)
+        {
+            string folder = $"{Root}/{folderName}";
             if (AssetDatabase.IsValidFolder(folder))
             {
                 return folder;
             }
 
-            _folderNameOverride = PlaygroundFolderName;
+            _folderNameOverride = folderName;
             try
             {
                 Build();

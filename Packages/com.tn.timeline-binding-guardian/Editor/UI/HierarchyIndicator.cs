@@ -12,14 +12,19 @@ namespace TimelineBindingGuardian
     /// - GUI 描画中は作成済みのキャッシュを引くだけ（検査・オブジェクト解決はしない）。
     /// - 祖先はイベントの集合で数え、同じ通知を重複して数えない（展開していなくても親で分かる）。
     /// - アイコンをクリックすると、その対象の通知だけを表示した状態でウィンドウを開く。
+    /// - Scene の見出し行にも、その Scene 内の通知をまとめて出す（Hierarchy は見出し行でも Scene の handle を渡して呼ぶ）。
     /// </summary>
     [InitializeOnLoad]
     public static class HierarchyIndicator
     {
         private const float IconSize = 16f;
+        // Scene の見出し行の右端にある Unity 標準の「⋮」メニューボタンを避ける幅
+        private const float SceneMenuButtonWidth = 16f;
 
         // GameObject のインスタンス ID → 関係する未読の通知（eventId）
         private static readonly Dictionary<int, HashSet<string>> _cache = new Dictionary<int, HashSet<string>>();
+        // Scene の handle → その Scene 内の Director に関係する未読の通知（eventId）。GameObject の ID と混ざらないよう別に持つ
+        private static readonly Dictionary<int, HashSet<string>> _sceneCache = new Dictionary<int, HashSet<string>>();
         private static bool _rebuildScheduled;
         private static GUIContent _icon;
 
@@ -58,6 +63,7 @@ namespace TimelineBindingGuardian
         {
             _rebuildScheduled = false;
             _cache.Clear();
+            _sceneCache.Clear();
             if (!GuardianSettings.Instance.HierarchyIconsEnabled)
             {
                 EditorApplication.RepaintHierarchyWindow();
@@ -94,28 +100,71 @@ namespace TimelineBindingGuardian
 
         private static void AddToHierarchy(GameObject gameObject, string eventId)
         {
-            Transform current = gameObject != null ? gameObject.transform : null;
-            while (current != null)
-            {
-                int key = current.gameObject.GetInstanceID();
-                if (!_cache.TryGetValue(key, out HashSet<string> events))
-                {
-                    events = new HashSet<string>();
-                    _cache.Add(key, events);
-                }
-
-                events.Add(eventId);
-                current = current.parent;
-            }
-        }
-
-        private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
-        {
-            if (_cache.Count == 0 || !_cache.TryGetValue(instanceId, out HashSet<string> events))
+            if (gameObject == null)
             {
                 return;
             }
 
+            Transform current = gameObject.transform;
+            while (current != null)
+            {
+                AddEvent(_cache, current.gameObject.GetInstanceID(), eventId);
+                current = current.parent;
+            }
+
+            AddEvent(_sceneCache, gameObject.scene.handle, eventId);
+        }
+
+        private static void AddEvent(Dictionary<int, HashSet<string>> cache, int key, string eventId)
+        {
+            if (!cache.TryGetValue(key, out HashSet<string> events))
+            {
+                events = new HashSet<string>();
+                cache.Add(key, events);
+            }
+
+            events.Add(eventId);
+        }
+
+        private static void OnHierarchyItemGUI(int instanceId, Rect selectionRect)
+        {
+            if (_cache.Count == 0)
+            {
+                return;
+            }
+
+            // Scene の見出し行（instanceId が読み込み済み Scene の handle）
+            if (_sceneCache.TryGetValue(instanceId, out HashSet<string> sceneEvents) && TryGetLoadedSceneName(instanceId, out string sceneName))
+            {
+                Rect sceneRect = new Rect(selectionRect.x, selectionRect.y, selectionRect.width - SceneMenuButtonWidth, selectionRect.height);
+                DrawIndicator(sceneRect, sceneEvents, sceneName);
+                return;
+            }
+
+            if (_cache.TryGetValue(instanceId, out HashSet<string> events))
+            {
+                DrawIndicator(selectionRect, events, GetName(instanceId));
+            }
+        }
+
+        private static bool TryGetLoadedSceneName(int handle, out string name)
+        {
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                Scene scene = SceneManager.GetSceneAt(i);
+                if (scene.handle == handle)
+                {
+                    name = scene.name;
+                    return true;
+                }
+            }
+
+            name = string.Empty;
+            return false;
+        }
+
+        private static void DrawIndicator(Rect selectionRect, HashSet<string> events, string name)
+        {
             if (_icon == null)
             {
                 _icon = new GUIContent(EditorGUIUtility.IconContent("console.warnicon.sml").image);
@@ -125,7 +174,7 @@ namespace TimelineBindingGuardian
             float countWidth = EditorStyles.miniLabel.CalcSize(new GUIContent(countText)).x;
             Rect iconRect = new Rect(selectionRect.xMax - IconSize - countWidth - 2, selectionRect.y, IconSize, selectionRect.height);
             Rect countRect = new Rect(iconRect.xMax, selectionRect.y, countWidth + 2, selectionRect.height);
-            _icon.tooltip = $"{events.Count} unread Timeline binding notification(s). Click to review, right-click to dismiss.";
+            _icon.tooltip = Lang.T("views.hierarchy.tooltip", events.Count);
 
             // 右クリックはボタンより先に判定する（Hierarchy 自体のコンテキストメニューは出さない）
             Rect hitRect = new Rect(iconRect.x, iconRect.y, iconRect.width + countRect.width, iconRect.height);
@@ -133,35 +182,34 @@ namespace TimelineBindingGuardian
             bool isRightClick = current.type == EventType.ContextClick || (current.type == EventType.MouseDown && current.button == 1);
             if (isRightClick && hitRect.Contains(current.mousePosition))
             {
-                ShowContextMenu(instanceId, events);
+                ShowContextMenu(name, events);
                 current.Use();
                 return;
             }
 
             if (GUI.Button(iconRect, _icon, GUIStyle.none) || GUI.Button(countRect, countText, EditorStyles.miniLabel))
             {
-                OnIconClicked(instanceId, events);
+                OnIconClicked(name, events);
             }
         }
 
-        private static void OnIconClicked(int instanceId, HashSet<string> events)
+        private static void OnIconClicked(string name, HashSet<string> events)
         {
-            GuardianWindow.ShowNotificationsFor(events.ToList(), GetName(instanceId));
+            GuardianWindow.ShowNotificationsFor(events.ToList(), name);
         }
 
         /// <summary>
         /// 右クリックメニュー: この行に数えられている通知をその場で消す。
         /// 消すのはこの変化の通知だけで、また新しく外れたときは改めて通知される（承認・恒久的な無視ではない）。
         /// </summary>
-        private static void ShowContextMenu(int instanceId, HashSet<string> events)
+        private static void ShowContextMenu(string name, HashSet<string> events)
         {
             List<string> eventIds = events.ToList();
-            string name = GetName(instanceId);
             GenericMenu menu = new GenericMenu();
-            menu.AddDisabledItem(new GUIContent($"{eventIds.Count} unread notification(s) for {name} and its children"));
+            menu.AddDisabledItem(new GUIContent(Lang.T("views.hierarchy.menu.header", eventIds.Count, name)));
             menu.AddSeparator(string.Empty);
-            menu.AddItem(new GUIContent($"Dismiss {eventIds.Count} notification(s) (this change only)"), false, () => OnDismissSelected(eventIds));
-            menu.AddItem(new GUIContent("Show notifications"), false, () => GuardianWindow.ShowNotificationsFor(eventIds, name));
+            menu.AddItem(new GUIContent(Lang.T("views.hierarchy.menu.dismiss", eventIds.Count)), false, () => OnDismissSelected(eventIds));
+            menu.AddItem(new GUIContent(Lang.T("views.hierarchy.menu.show")), false, () => GuardianWindow.ShowNotificationsFor(eventIds, name));
             menu.ShowAsContext();
         }
 
@@ -178,7 +226,7 @@ namespace TimelineBindingGuardian
 #pragma warning disable 618
             Object target = EditorUtility.InstanceIDToObject(instanceId);
 #pragma warning restore 618
-            return target != null ? target.name : "selected object";
+            return target != null ? target.name : Lang.T("views.hierarchy.selectedObject");
         }
     }
 }

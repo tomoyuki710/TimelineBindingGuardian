@@ -131,7 +131,7 @@ namespace TimelineBindingGuardian
             error = string.Empty;
             if (!IsWritable)
             {
-                error = $"History is read-only: {ErrorMessage}";
+                error = Lang.T("engine.store.readOnly", ErrorMessage);
                 return false;
             }
 
@@ -157,7 +157,7 @@ namespace TimelineBindingGuardian
             }
             catch (Exception exception)
             {
-                error = $"The history could not be saved: {exception.Message}";
+                error = Lang.T("engine.store.saveFailed", exception.Message);
                 return false;
             }
 
@@ -192,7 +192,7 @@ namespace TimelineBindingGuardian
                 bool saved = _partitionGenerations.ContainsKey(key);
                 if (saved && !_loadedPartitions.Contains(key))
                 {
-                    throw new InvalidOperationException($"History partition '{key}' must be loaded before it is rewritten.");
+                    throw new InvalidOperationException(Lang.T("engine.store.partitionNotLoaded", key));
                 }
             }
         }
@@ -229,13 +229,13 @@ namespace TimelineBindingGuardian
             }
             catch (Exception exception)
             {
-                SetError(HistoryStoreStatus.Corrupted, $"The history manifest could not be read: {exception.Message}");
+                SetError(HistoryStoreStatus.Corrupted, Lang.T("engine.store.manifestReadFailed", exception.Message));
                 return;
             }
 
             if (manifest == null || manifest.Partitions == null)
             {
-                SetError(HistoryStoreStatus.Corrupted, "The history manifest is empty or invalid.");
+                SetError(HistoryStoreStatus.Corrupted, Lang.T("engine.store.manifestInvalid"));
                 return;
             }
 
@@ -334,7 +334,7 @@ namespace TimelineBindingGuardian
             string json = ReadPartitionJson(GetPartitionPath(kind, id), expected, out bool fromBackup);
             if (json == null)
             {
-                SetError(HistoryStoreStatus.Corrupted, $"The history partition '{kind}/{id}' is missing or does not match the manifest (generation {expected}).");
+                SetError(HistoryStoreStatus.Corrupted, Lang.T("engine.store.partitionMismatch", key, expected));
                 return false;
             }
 
@@ -362,7 +362,7 @@ namespace TimelineBindingGuardian
                     loaded.Notifications.AddRange(JsonUtility.FromJson<NotificationsPartition>(json).Notifications);
                     break;
                 default:
-                    SetError(HistoryStoreStatus.UnsupportedSchema, $"Unknown history partition kind '{kind}'.");
+                    SetError(HistoryStoreStatus.UnsupportedSchema, Lang.T("engine.store.unknownPartitionKind", kind));
                     return false;
             }
 
@@ -407,19 +407,19 @@ namespace TimelineBindingGuardian
             }
             catch (Exception exception)
             {
-                SetError(HistoryStoreStatus.Corrupted, $"The legacy history file could not be read: {exception.Message}");
+                SetError(HistoryStoreStatus.Corrupted, Lang.T("engine.store.legacyReadFailed", exception.Message));
                 return;
             }
 
             if (legacy == null)
             {
-                SetError(HistoryStoreStatus.Corrupted, "The legacy history file is empty or invalid.");
+                SetError(HistoryStoreStatus.Corrupted, Lang.T("engine.store.legacyInvalid"));
                 return;
             }
 
             if (legacy.SchemaVersion != LegacySchemaVersion)
             {
-                SetError(HistoryStoreStatus.UnsupportedSchema, $"The legacy history file uses schema version {legacy.SchemaVersion}.");
+                SetError(HistoryStoreStatus.UnsupportedSchema, Lang.T("engine.store.legacySchema", legacy.SchemaVersion));
                 return;
             }
 
@@ -431,7 +431,7 @@ namespace TimelineBindingGuardian
             legacy.InternStrings(new StringPool());
             if (!TryCommit(legacy, HistoryChangeSet.All, out string error))
             {
-                SetError(HistoryStoreStatus.Corrupted, $"The legacy history could not be migrated: {error}");
+                SetError(HistoryStoreStatus.Corrupted, Lang.T("engine.store.legacyMigrateFailed", error));
                 return;
             }
 
@@ -604,7 +604,7 @@ namespace TimelineBindingGuardian
             if (schemaVersion != HistoryState.CurrentSchemaVersion)
             {
                 SetError(HistoryStoreStatus.UnsupportedSchema,
-                    $"The history uses schema version {schemaVersion}, but this version supports {HistoryState.CurrentSchemaVersion}.");
+                    Lang.T("engine.store.schemaMismatch", schemaVersion, HistoryState.CurrentSchemaVersion));
                 return false;
             }
 
@@ -616,7 +616,7 @@ namespace TimelineBindingGuardian
             bool hasProject = !string.IsNullOrEmpty(projectGuid) && !string.IsNullOrEmpty(_projectGuid);
             if (hasProject && projectGuid != _projectGuid)
             {
-                SetError(HistoryStoreStatus.ProjectMismatch, "The history belongs to a different project.");
+                SetError(HistoryStoreStatus.ProjectMismatch, Lang.T("engine.store.projectMismatch"));
                 return false;
             }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using UnityEditor;
@@ -14,6 +15,7 @@ namespace TimelineBindingGuardian
     {
         private static readonly Color MutedColor = new Color(0.6f, 0.6f, 0.6f);
 
+        private readonly PopupField<LanguagePreference> _language;
         private readonly Toggle _monitoring;
         private readonly Toggle _hierarchyIcons;
         private readonly Toggle _consoleWarnings;
@@ -27,36 +29,41 @@ namespace TimelineBindingGuardian
             Root.style.paddingLeft = 8;
             Root.style.paddingTop = 6;
 
-            _monitoring = new Toggle("Automatic monitoring");
-            _monitoring.tooltip = "Scan automatically when scenes and prefabs are saved, imported, or opened, and when the editor starts.";
+            List<LanguagePreference> languages = new List<LanguagePreference> { LanguagePreference.Auto, LanguagePreference.English, LanguagePreference.Japanese };
+            _language = new PopupField<LanguagePreference>(Lang.T("common.language"), languages, GuardianSettings.Instance.Language, FormatLanguageChoice, FormatLanguageChoice);
+            _language.RegisterValueChangedCallback(OnLanguageChanged);
+            Root.Add(_language);
+
+            _monitoring = new Toggle(Lang.T("views.settings.monitoring"));
+            _monitoring.tooltip = Lang.T("views.settings.monitoring.tooltip");
             _monitoring.RegisterValueChangedCallback(OnMonitoringChanged);
             Root.Add(_monitoring);
-            Root.Add(CreateMutedLabel("While off, changes are not observed. They are compared at the next scan (the observation time will be the time of that scan)."));
+            Root.Add(CreateMutedLabel(Lang.T("views.settings.monitoring.note")));
 
-            _hierarchyIcons = new Toggle("Hierarchy icons");
-            _hierarchyIcons.tooltip = "Show the number of unread notifications next to directors and their parents in the Hierarchy.";
+            _hierarchyIcons = new Toggle(Lang.T("views.settings.hierarchyIcons"));
+            _hierarchyIcons.tooltip = Lang.T("views.settings.hierarchyIcons.tooltip");
             _hierarchyIcons.RegisterValueChangedCallback(OnHierarchyIconsChanged);
             Root.Add(_hierarchyIcons);
 
-            _consoleWarnings = new Toggle("Console warnings");
-            _consoleWarnings.tooltip = "Write one summarized warning to the Console when new unbound bindings are detected.";
+            _consoleWarnings = new Toggle(Lang.T("views.settings.consoleWarnings"));
+            _consoleWarnings.tooltip = Lang.T("views.settings.consoleWarnings.tooltip");
             _consoleWarnings.RegisterValueChangedCallback(OnConsoleWarningsChanged);
             Root.Add(_consoleWarnings);
 
-            Root.Add(CreateHeader("Excluded folders"));
-            Root.Add(CreateMutedLabel("Scenes, prefabs, and timelines in these folders (and their subfolders) are not monitored or recorded, even by Scan Now. Existing history is kept."));
+            Root.Add(CreateHeader(Lang.T("views.settings.excluded.header")));
+            Root.Add(CreateMutedLabel(Lang.T("views.settings.excluded.note", Lang.T("window.scanNow"))));
             _excludedList = new VisualElement();
             Root.Add(_excludedList);
-            Button add = new Button(OnAddFolderClicked) { text = "Add Folder…" };
+            Button add = new Button(OnAddFolderClicked) { text = Lang.T("views.settings.excluded.add") };
             add.style.alignSelf = Align.FlexStart;
             Root.Add(add);
 
-            Root.Add(CreateHeader("History"));
+            Root.Add(CreateHeader(Lang.T("views.settings.history.header")));
             _storeLabel = new Label();
             _storeLabel.style.whiteSpace = WhiteSpace.Normal;
             Root.Add(_storeLabel);
-            Root.Add(CreateMutedLabel("History and notification states are stored only on this computer (UserSettings is normally not under version control). Nothing is sent over the network."));
-            Root.Add(CreateMutedLabel("History starts at the first observation. Bindings that were already broken before that cannot be detected, and changes that happen and revert between scans may not be observed."));
+            Root.Add(CreateMutedLabel(Lang.T("views.settings.history.privacy")));
+            Root.Add(CreateMutedLabel(Lang.T("views.settings.history.limitation")));
         }
 
         public ScrollView Root { get; }
@@ -64,6 +71,7 @@ namespace TimelineBindingGuardian
         public void Refresh()
         {
             GuardianSettings settings = GuardianSettings.Instance;
+            _language.SetValueWithoutNotify(settings.Language);
             _monitoring.SetValueWithoutNotify(settings.MonitoringEnabled);
             _hierarchyIcons.SetValueWithoutNotify(settings.HierarchyIconsEnabled);
             _consoleWarnings.SetValueWithoutNotify(settings.ConsoleWarningsEnabled);
@@ -72,8 +80,8 @@ namespace TimelineBindingGuardian
 
             HistoryStore store = GuardianHistory.Shared.Store;
             string size = (store.GetTotalSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
-            string status = store.IsWritable ? "OK" : $"read-only ({store.Status}): {store.ErrorMessage}";
-            _storeLabel.text = $"Folder: {store.Directory}\nSize on disk: {size} KB   Scopes: {store.State.Scopes.Count}   Events: {store.State.Events.Count}   Status: {status}";
+            string status = store.IsWritable ? Lang.T("views.settings.history.statusOk") : Lang.T("views.settings.history.statusReadOnly", store.Status, store.ErrorMessage);
+            _storeLabel.text = Lang.T("views.settings.history.store", store.Directory, size, store.State.Scopes.Count, store.State.Events.Count, status);
         }
 
         private void RefreshExcludedFolders(GuardianSettings settings)
@@ -81,7 +89,7 @@ namespace TimelineBindingGuardian
             _excludedList.Clear();
             if (settings.ExcludedFolders.Count == 0)
             {
-                _excludedList.Add(CreateMutedLabel("(none)"));
+                _excludedList.Add(CreateMutedLabel(Lang.T("views.settings.excluded.none")));
                 return;
             }
 
@@ -94,14 +102,14 @@ namespace TimelineBindingGuardian
                 label.style.minWidth = 300;
                 row.Add(label);
                 string target = folder;
-                row.Add(new Button(() => OnRemoveFolderClicked(target)) { text = "Remove" });
+                row.Add(new Button(() => OnRemoveFolderClicked(target)) { text = Lang.T("views.settings.excluded.remove") });
                 _excludedList.Add(row);
             }
         }
 
         private void OnAddFolderClicked()
         {
-            string selected = EditorUtility.OpenFolderPanel("Exclude folder from Timeline Binding Guardian", Application.dataPath, string.Empty);
+            string selected = EditorUtility.OpenFolderPanel(Lang.T("views.settings.excluded.panelTitle"), Application.dataPath, string.Empty);
             if (string.IsNullOrEmpty(selected))
             {
                 return;
@@ -110,7 +118,7 @@ namespace TimelineBindingGuardian
             string assetPath = ToAssetPath(selected);
             if (assetPath == null)
             {
-                EditorUtility.DisplayDialog("Timeline Binding Guardian", "Select a folder inside this project's Assets folder.", "OK");
+                EditorUtility.DisplayDialog("Timeline Binding Guardian", Lang.T("views.settings.excluded.outsideAssets"), Lang.T("views.common.ok"));
                 return;
             }
 
@@ -138,6 +146,27 @@ namespace TimelineBindingGuardian
             string relative = path.Substring(projectRoot.Length + 1);
             bool isAssets = relative.Equals("Assets", StringComparison.OrdinalIgnoreCase) || relative.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase);
             return isAssets ? relative : null;
+        }
+
+        /// <summary>
+        /// 言語の選択肢の表示文字列。
+        /// </summary>
+        private static string FormatLanguageChoice(LanguagePreference preference)
+        {
+            switch (preference)
+            {
+                case LanguagePreference.English:
+                    return Lang.T("common.language.english");
+                case LanguagePreference.Japanese:
+                    return Lang.T("common.language.japanese");
+                default:
+                    return Lang.T("common.language.auto");
+            }
+        }
+
+        private void OnLanguageChanged(ChangeEvent<LanguagePreference> changeEvent)
+        {
+            GuardianSettings.Instance.Language = changeEvent.newValue;
         }
 
         private void OnMonitoringChanged(ChangeEvent<bool> changeEvent)

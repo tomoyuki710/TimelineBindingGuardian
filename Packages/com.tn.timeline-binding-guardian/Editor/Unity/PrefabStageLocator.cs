@@ -35,21 +35,37 @@ namespace TimelineBindingGuardian
                 return false;
             }
 
-            Transform stageTransform = FindByIndexPath(stage.prefabContentsRoot.transform, GetIndexPath(assetTransform));
-            if (stageTransform == null)
+            return TryMapToContents(assetObject, stage.prefabContentsRoot.transform, out stageObject);
+        }
+
+        /// <summary>
+        /// Prefab Asset 内のオブジェクトを、その Prefab の内容（Prefab Mode や EditPrefabContentsScope で開いたもの）の
+        /// 対応オブジェクトへ読み替える。兄弟インデックスのパスと同型コンポーネントの順番で探し、Source の一致で検証する。
+        /// </summary>
+        public static bool TryMapToContents(Object assetObject, Transform contentsRoot, out Object contentsObject)
+        {
+            contentsObject = null;
+            Transform assetTransform = GetTransform(assetObject);
+            if (assetTransform == null || contentsRoot == null)
+            {
+                return false;
+            }
+
+            Transform contentsTransform = FindByIndexPath(contentsRoot, GetIndexPath(assetTransform));
+            if (contentsTransform == null)
             {
                 return false;
             }
 
             Object candidate = assetObject is Component component
-                ? FindSameComponent(component, stageTransform)
-                : stageTransform.gameObject;
+                ? FindSameComponent(component, contentsTransform)
+                : contentsTransform.gameObject;
             if (candidate == null || !IsSameObject(assetObject, candidate))
             {
                 return false;
             }
 
-            stageObject = candidate;
+            contentsObject = candidate;
             return true;
         }
 

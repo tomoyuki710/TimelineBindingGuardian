@@ -23,8 +23,8 @@ namespace TimelineBindingGuardian
 
             Dictionary<string, ChangeEvent> events = summary.NewEvents.ToDictionary(e => e.EventId);
             StringBuilder message = new StringBuilder();
-            message.Append($"[Timeline Binding Guardian] {summary.NewNotifications.Count} newly unbound Timeline binding(s) detected ({trigger}). ");
-            message.AppendLine("This is not necessarily an error; review them in Window > Timeline > Timeline Binding Guardian.");
+            message.Append(Lang.T("engine.notify.header", summary.NewNotifications.Count, Lang.RenderNote(trigger)));
+            message.AppendLine(Lang.T("engine.notify.notAnError"));
             foreach (NotificationRecord notification in summary.NewNotifications.Take(MaxListed))
             {
                 if (events.TryGetValue(notification.EventId, out ChangeEvent changeEvent))
@@ -35,7 +35,7 @@ namespace TimelineBindingGuardian
 
             if (summary.NewNotifications.Count > MaxListed)
             {
-                message.AppendLine($"  ... and {summary.NewNotifications.Count - MaxListed} more.");
+                message.AppendLine(Lang.T("engine.notify.andMore", summary.NewNotifications.Count - MaxListed));
             }
 
             Debug.LogWarning(message.ToString());
@@ -46,8 +46,8 @@ namespace TimelineBindingGuardian
             string owner = Path.GetFileName(changeEvent.Owner.AssetPathHint);
             // 記録した時点で観測済みの文脈に影響が無くても、依存する Scene の検査が後に続くことがある
             string impact = changeEvent.AffectsEffective
-                ? $"affects {changeEvent.AffectedContexts.Count} observed context(s) so far"
-                : "no effect observed yet; scenes using it are checked when scanned";
+                ? Lang.T("engine.notify.affects", changeEvent.AffectedContexts.Count)
+                : Lang.T("engine.notify.noEffectYet");
             return $"{owner} › {changeEvent.Director.HierarchyPathHint} › {changeEvent.Track.TrackPathHint}: " +
                 $"{HistoryView.FormatValue(changeEvent.Before)} → {HistoryView.FormatValue(changeEvent.After)} ({impact})";
         }

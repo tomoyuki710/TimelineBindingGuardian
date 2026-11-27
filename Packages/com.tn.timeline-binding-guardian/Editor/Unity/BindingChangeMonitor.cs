@@ -55,7 +55,7 @@ namespace TimelineBindingGuardian
 
         private static void OnStartup()
         {
-            ScanScheduler.EnqueueLoadedScenes("Editor startup");
+            ScanScheduler.EnqueueLoadedScenes(Lang.T("engine.reason.editorStartup"));
         }
 
         private static void OnBeforeAssemblyReload()
@@ -65,12 +65,12 @@ namespace TimelineBindingGuardian
 
         private static void OnSceneSaved(Scene scene)
         {
-            ScanScheduler.Enqueue(scene.path, ScanTargetKind.Scene, "Scene saved");
+            ScanScheduler.Enqueue(scene.path, ScanTargetKind.Scene, Lang.T("engine.reason.sceneSaved"));
         }
 
         private static void OnSceneOpened(Scene scene, OpenSceneMode mode)
         {
-            ScanScheduler.Enqueue(scene.path, ScanTargetKind.Scene, "Scene opened");
+            ScanScheduler.Enqueue(scene.path, ScanTargetKind.Scene, Lang.T("engine.reason.sceneOpened"));
         }
 
         private static void OnPrefabSaved(GameObject prefabContentsRoot)
@@ -78,7 +78,7 @@ namespace TimelineBindingGuardian
             PrefabStage stage = PrefabStageUtility.GetPrefabStage(prefabContentsRoot);
             if (stage != null)
             {
-                ScanScheduler.Enqueue(stage.assetPath, ScanTargetKind.Prefab, "Prefab saved");
+                ScanScheduler.Enqueue(stage.assetPath, ScanTargetKind.Prefab, Lang.T("engine.reason.prefabSaved"));
             }
         }
     }
@@ -93,12 +93,12 @@ namespace TimelineBindingGuardian
             bool relevant = false;
             foreach (string path in importedAssets)
             {
-                relevant |= EnqueueIfRelevant(path, "Asset imported");
+                relevant |= EnqueueIfRelevant(path, Lang.T("engine.reason.assetImported"));
             }
 
             foreach (string path in movedAssets)
             {
-                relevant |= EnqueueIfRelevant(path, "Asset moved");
+                relevant |= EnqueueIfRelevant(path, Lang.T("engine.reason.assetMoved"));
             }
 
             if (relevant || deletedAssets.Length > 0)
