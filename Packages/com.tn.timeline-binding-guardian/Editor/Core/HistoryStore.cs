@@ -245,6 +245,8 @@ namespace TimelineBindingGuardian
             }
 
             State.Scopes.AddRange(manifest.Scopes ?? new List<ScopeRecord>());
+            // ビルド前検査の記録（Phase 5 で追加した任意項目。古い manifest には無い）
+            State.Builds.AddRange(manifest.Builds ?? new List<BuildCheckRecord>());
             foreach (PartitionEntry entry in manifest.Partitions)
             {
                 _partitionGenerations[GetPartitionKey(entry.Kind, entry.Id)] = entry.Generation;
@@ -526,7 +528,7 @@ namespace TimelineBindingGuardian
                 .OrderBy(e => e.Kind, StringComparer.Ordinal)
                 .ThenBy(e => e.Id, StringComparer.Ordinal)
                 .ToList();
-            Manifest manifest = new Manifest(HistoryState.CurrentSchemaVersion, _projectGuid, generation, state.Scopes, entries);
+            Manifest manifest = new Manifest(HistoryState.CurrentSchemaVersion, _projectGuid, generation, state.Scopes, entries, state.Builds);
             System.IO.Directory.CreateDirectory(Directory);
             string tempPath = ManifestPath + ".tmp";
             byte[] bytes = new UTF8Encoding(false).GetBytes(JsonUtility.ToJson(manifest, true));
@@ -704,9 +706,12 @@ namespace TimelineBindingGuardian
             [SerializeField] private long generation;
             [SerializeField] private List<ScopeRecord> scopes;
             [SerializeField] private List<PartitionEntry> partitions;
+            // 任意項目（Phase 5）。schemaVersion は上げない（欠けていれば null として読まれる）
+            [SerializeField] private List<BuildCheckRecord> builds;
 
-            public Manifest(int schemaVersion, string projectGuid, long generation, List<ScopeRecord> scopes, List<PartitionEntry> partitions)
+            public Manifest(int schemaVersion, string projectGuid, long generation, List<ScopeRecord> scopes, List<PartitionEntry> partitions, List<BuildCheckRecord> builds)
             {
+                this.builds = builds;
                 this.schemaVersion = schemaVersion;
                 this.projectGuid = projectGuid;
                 this.generation = generation;
@@ -719,6 +724,7 @@ namespace TimelineBindingGuardian
             public long Generation => generation;
             public List<ScopeRecord> Scopes => scopes;
             public List<PartitionEntry> Partitions => partitions;
+            public List<BuildCheckRecord> Builds => builds;
         }
 
         [Serializable]

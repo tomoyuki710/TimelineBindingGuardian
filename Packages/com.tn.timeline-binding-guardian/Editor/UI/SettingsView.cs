@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -19,8 +20,11 @@ namespace TimelineBindingGuardian
         private readonly Toggle _monitoring;
         private readonly Toggle _hierarchyIcons;
         private readonly Toggle _consoleWarnings;
+        private readonly Toggle _preBuildCheck;
         private readonly Label _storeLabel;
         private readonly VisualElement _excludedList;
+        private readonly VisualElement _intentionalList;
+        private readonly Label _intentionalError;
 
         public SettingsView()
         {
@@ -50,6 +54,11 @@ namespace TimelineBindingGuardian
             _consoleWarnings.RegisterValueChangedCallback(OnConsoleWarningsChanged);
             Root.Add(_consoleWarnings);
 
+            _preBuildCheck = new Toggle(Lang.T("views.settings.preBuildCheck"));
+            _preBuildCheck.tooltip = Lang.T("views.settings.preBuildCheck.tooltip");
+            _preBuildCheck.RegisterValueChangedCallback(OnPreBuildCheckChanged);
+            Root.Add(_preBuildCheck);
+
             Root.Add(CreateHeader(Lang.T("views.settings.excluded.header")));
             Root.Add(CreateMutedLabel(Lang.T("views.settings.excluded.note", Lang.T("window.scanNow"))));
             _excludedList = new VisualElement();
@@ -57,6 +66,14 @@ namespace TimelineBindingGuardian
             Button add = new Button(OnAddFolderClicked) { text = Lang.T("views.settings.excluded.add") };
             add.style.alignSelf = Align.FlexStart;
             Root.Add(add);
+
+            Root.Add(CreateHeader(Lang.T("intentional.settings.header")));
+            Root.Add(CreateMutedLabel(Lang.T("intentional.settings.note", IntentionalNullRegistry.DefaultFilePath)));
+            _intentionalError = CreateMutedLabel(string.Empty);
+            _intentionalError.style.color = new Color(0.95f, 0.45f, 0.35f);
+            Root.Add(_intentionalError);
+            _intentionalList = new VisualElement();
+            Root.Add(_intentionalList);
 
             Root.Add(CreateHeader(Lang.T("views.settings.history.header")));
             _storeLabel = new Label();
@@ -75,13 +92,72 @@ namespace TimelineBindingGuardian
             _monitoring.SetValueWithoutNotify(settings.MonitoringEnabled);
             _hierarchyIcons.SetValueWithoutNotify(settings.HierarchyIconsEnabled);
             _consoleWarnings.SetValueWithoutNotify(settings.ConsoleWarningsEnabled);
+            _preBuildCheck.SetValueWithoutNotify(settings.PreBuildCheckEnabled);
 
             RefreshExcludedFolders(settings);
+            RefreshIntentionalNulls();
 
             HistoryStore store = GuardianHistory.Shared.Store;
             string size = (store.GetTotalSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
             string status = store.IsWritable ? Lang.T("views.settings.history.statusOk") : Lang.T("views.settings.history.statusReadOnly", store.Status, store.ErrorMessage);
             _storeLabel.text = Lang.T("views.settings.history.store", store.Directory, size, store.State.Scopes.Count, store.State.Events.Count, status);
+        }
+
+        /// <summary>
+        /// 意図的な NULL の共有リストの一覧。現在の状態（最後に記録した値）も出し、Bound に戻ったものは削除を促す。
+        /// </summary>
+        private void RefreshIntentionalNulls()
+        {
+            _intentionalList.Clear();
+            string error = IntentionalNullRegistry.Error;
+            _intentionalError.text = string.IsNullOrEmpty(error) ? string.Empty : Lang.T("intentional.settings.fileError", error);
+            IReadOnlyList<IntentionalNullEntry> entries = IntentionalNullRegistry.Entries;
+            if (entries.Count == 0)
+            {
+                _intentionalList.Add(CreateMutedLabel(Lang.T("views.settings.excluded.none")));
+                return;
+            }
+
+            // 現在の状態を出すため、登録された階層の Owner の記録を読み込む（Owner 階層キーの先頭が Owner の GUID）
+            GuardianHistory.Shared.Store.EnsureOwnersLoaded(entries.Select(e => e.OwnerLevelKey.Split('|')[0]).Distinct().ToList());
+            Func<string, LevelValue> current = GuardianHistory.Shared.CreateCurrentValueLookup();
+            foreach (IntentionalNullEntry entry in entries)
+            {
+                VisualElement row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                string target = $"{Path.GetFileName(entry.OwnerPath)} › {entry.DirectorPath} › {entry.TrackPath}";
+                string reason = string.IsNullOrEmpty(entry.Reason) ? string.Empty : $"  ({entry.Reason})";
+                Label label = new Label($"{target}{reason}  —  {FormatIntentionalState(current(entry.OwnerLevelKey))}");
+                label.style.unityTextAlign = TextAnchor.MiddleLeft;
+                label.style.flexShrink = 1;
+                label.style.whiteSpace = WhiteSpace.Normal;
+                label.tooltip = $"{entry.OwnerPath}\n{entry.TimelinePath}\n{entry.OwnerLevelKey}";
+                row.Add(label);
+                string key = entry.OwnerLevelKey;
+                row.Add(new Button(() => OnRemoveIntentionalClicked(key)) { text = Lang.T("intentional.button.unregister") });
+                _intentionalList.Add(row);
+            }
+        }
+
+        private static string FormatIntentionalState(LevelValue value)
+        {
+            if (value == null)
+            {
+                return Lang.T("intentional.state.unobserved");
+            }
+
+            return value.ValueState == ValueState.Bound ? Lang.T("intentional.state.bound") : Lang.T("intentional.state.null");
+        }
+
+        private void OnRemoveIntentionalClicked(string ownerLevelKey)
+        {
+            if (!IntentionalNullRegistry.TryRemove(ownerLevelKey, out string error))
+            {
+                _intentionalError.text = Lang.T("intentional.error", error);
+                return;
+            }
+
+            RefreshIntentionalNulls();
         }
 
         private void RefreshExcludedFolders(GuardianSettings settings)
@@ -182,6 +258,11 @@ namespace TimelineBindingGuardian
         private void OnConsoleWarningsChanged(ChangeEvent<bool> changeEvent)
         {
             GuardianSettings.Instance.ConsoleWarningsEnabled = changeEvent.newValue;
+        }
+
+        private void OnPreBuildCheckChanged(ChangeEvent<bool> changeEvent)
+        {
+            GuardianSettings.Instance.PreBuildCheckEnabled = changeEvent.newValue;
         }
 
         private static Label CreateHeader(string text)

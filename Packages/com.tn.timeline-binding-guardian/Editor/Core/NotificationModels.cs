@@ -61,13 +61,21 @@ namespace TimelineBindingGuardian
         /// <summary>
         /// 新しいイベントのうち通知対象のものに未読の通知を作る。作った通知を返す。
         /// </summary>
-        public static List<NotificationRecord> CreateForNewEvents(HistoryState state, IEnumerable<ChangeEvent> newEvents, string atUtc)
+        /// <param name="isIntentional">意図的な NULL の共有リストに載っている Owner 階層キーか（載っていれば通知しない）。null なら判定しない。</param>
+        public static List<NotificationRecord> CreateForNewEvents(HistoryState state, IEnumerable<ChangeEvent> newEvents, string atUtc,
+            Func<string, bool> isIntentional = null)
         {
             HashSet<string> existing = new HashSet<string>(state.Notifications.Select(n => n.EventId));
             List<NotificationRecord> created = new List<NotificationRecord>();
             foreach (ChangeEvent changeEvent in newEvents)
             {
-                if (!IsNotifiable(changeEvent) || !existing.Add(changeEvent.EventId))
+                bool intentional = isIntentional != null && isIntentional(changeEvent.OwnerLevelKey);
+                if (!IsNotifiable(changeEvent) || intentional)
+                {
+                    continue;
+                }
+
+                if (!existing.Add(changeEvent.EventId))
                 {
                     continue;
                 }

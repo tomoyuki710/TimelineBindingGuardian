@@ -77,6 +77,9 @@ namespace TimelineBindingGuardian
         private bool _subscribed;
         // 前回 UI を作ったときの表示言語（変わっていたら UI を作り直す）
         private UiLanguage _builtLanguage;
+        private bool _refreshPending;
+        // 詳細に表示中のノード（登録・解除の後に表示し直すため）
+        private NodeData _selectedNode;
         private bool _rebuildScheduled;
 
         [MenuItem("Window/Timeline Binding Guardian")]
@@ -193,6 +196,7 @@ namespace TimelineBindingGuardian
             GuardianHistory.Changed += OnHistoryChanged;
             GuardianSettings.Changed += OnSettingsChanged;
             ScanScheduler.Processed += OnAutoScanProcessed;
+            IntentionalNullRegistry.Changed += OnIntentionalListChanged;
             _subscribed = true;
         }
 
@@ -201,13 +205,32 @@ namespace TimelineBindingGuardian
             GuardianHistory.Changed -= OnHistoryChanged;
             GuardianSettings.Changed -= OnSettingsChanged;
             ScanScheduler.Processed -= OnAutoScanProcessed;
+            IntentionalNullRegistry.Changed -= OnIntentionalListChanged;
             _subscribed = false;
         }
 
         private void OnHistoryChanged()
         {
+            // 表示言語の一時的な上書き中（テストの実行中）は更新せず、上書きが終わってから更新する
+            if (Lang.IsTemporarilyOverridden)
+            {
+                _refreshPending = true;
+                return;
+            }
+
             RefreshCurrentTab();
             UpdateHeader();
+        }
+
+        /// <summary>
+        /// 意図的な NULL の共有リストが変わったら、Scene Bindings の詳細（登録・解除のボタン）を表示し直す。
+        /// </summary>
+        private void OnIntentionalListChanged()
+        {
+            if (_currentTab == Tab.SceneBindings && _selectedNode != null)
+            {
+                ShowDetails(_selectedNode);
+            }
         }
 
         private void OnSettingsChanged()
@@ -259,6 +282,27 @@ namespace TimelineBindingGuardian
                 return;
             }
 
+            // 表示言語の一時的な上書き中（テストの実行中）は、上書き中の言語の文言を出さないよう何もしない
+            if (Lang.IsTemporarilyOverridden)
+            {
+                return;
+            }
+
+            // 設定の変更以外で表示言語が変わった場合（テストの実行中は英語に固定され、終了後に戻る等）も、
+            // 1 秒ごとのこの更新で気付いて作り直す（古い言語の文言が残らないように）
+            if (Lang.Current != _builtLanguage)
+            {
+                ScheduleRebuild();
+                return;
+            }
+
+            // 上書き中に届いた履歴の変化を、上書きが終わってから表示に反映する
+            if (_refreshPending)
+            {
+                _refreshPending = false;
+                RefreshCurrentTab();
+            }
+
             GuardianHistory history = GuardianHistory.Shared;
             List<(NotificationRecord Notification, ChangeEvent Event)> unread = history.GetNotifications(false);
             Func<string, LevelValue> current = history.CreateCurrentValueLookup();
@@ -271,6 +315,12 @@ namespace TimelineBindingGuardian
             if (!history.Store.IsWritable)
             {
                 _headerLabel.text += Lang.T("window.header.readOnly", history.Store.ErrorMessage);
+            }
+
+            string intentionalError = IntentionalNullRegistry.Error;
+            if (!string.IsNullOrEmpty(intentionalError))
+            {
+                _headerLabel.text += "  |  " + Lang.T("intentional.settings.fileError", intentionalError);
             }
         }
 
@@ -355,6 +405,10 @@ namespace TimelineBindingGuardian
             ToolbarButton scanButton = new ToolbarButton(OnScanClicked) { text = Lang.T("window.scanNow") };
             toolbar.Add(scanButton);
 
+            ToolbarButton buildScanButton = new ToolbarButton(OnBuildScenesScanClicked) { text = Lang.T("window.buildScan.button") };
+            buildScanButton.tooltip = Lang.T("window.buildScan.tooltip");
+            toolbar.Add(buildScanButton);
+
             EnumField scopeField = new EnumField(_scope);
             scopeField.style.width = 130;
             scopeField.RegisterValueChangedCallback(OnScopeChanged);
@@ -412,6 +466,11 @@ namespace TimelineBindingGuardian
         private void OnScanClicked()
         {
             Scan();
+        }
+
+        private void OnBuildScenesScanClicked()
+        {
+            ScanBuildScenes();
         }
 
         private void OnScopeChanged(ChangeEvent<Enum> changeEvent)
@@ -473,6 +532,70 @@ namespace TimelineBindingGuardian
         /// <summary>
         /// スキャン結果を履歴に記録する（保存済みの Scene のみ）。
         /// </summary>
+        /// <summary>
+        /// Build Settings の Scene を、閉じているものは一時的に開いて検査する（確認ダイアログ・進捗・キャンセルあり）。
+        /// </summary>
+        private void ScanBuildScenes()
+        {
+            string blocking = BuildSceneScan.GetBlockingReason();
+            if (blocking.Length > 0)
+            {
+                _statusLabel.text = Lang.T("window.buildScan.blocked", blocking);
+                return;
+            }
+
+            List<string> scenes = PreBuildCheck.GetBuildScenePaths();
+            if (scenes.Count == 0)
+            {
+                _statusLabel.text = Lang.T("window.buildScan.noScenes");
+                return;
+            }
+
+            int closedCount = scenes.Count(p => !SceneManager.GetSceneByPath(p).isLoaded);
+            bool confirmed = EditorUtility.DisplayDialog("Timeline Binding Guardian",
+                Lang.T("window.buildScan.confirm", scenes.Count, closedCount),
+                Lang.T("window.buildScan.confirm.ok"), Lang.T("window.dialog.cancel"));
+            if (!confirmed)
+            {
+                return;
+            }
+
+            BuildSceneScanResult result;
+            try
+            {
+                result = BuildSceneScan.Run(scenes, GuardianHistory.Shared, GuardianSettings.Instance.IsExcluded, ShowBuildScanProgress);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+
+            NotificationService.ReportNewNotifications(result.Combined, Lang.T("engine.reason.buildScan"));
+            _statusLabel.text = FormatBuildScanResult(result);
+            RefreshCurrentTab();
+        }
+
+        private static bool ShowBuildScanProgress(int index, int total, string scenePath)
+        {
+            string message = Lang.T("window.buildScan.progress", index + 1, total, scenePath);
+            return EditorUtility.DisplayCancelableProgressBar("Timeline Binding Guardian", message, total == 0 ? 1f : (float)index / total);
+        }
+
+        private static string FormatBuildScanResult(BuildSceneScanResult result)
+        {
+            if (result.BlockingReason.Length > 0)
+            {
+                return Lang.T("window.buildScan.blocked", result.BlockingReason);
+            }
+
+            int lost = result.Combined.NewEvents.Count(e => e.ChangeType == ChangeType.BindingLost);
+            string key = result.Cancelled ? "window.buildScan.cancelled" : "window.buildScan.done";
+            List<string> lines = new List<string> { Lang.T(key, result.ScannedSceneCount, result.OpenedSceneCount, result.Combined.NewEventCount, lost) };
+            lines.AddRange(result.Errors.Select(e => Lang.T("window.record.notSaved", e)));
+            lines.AddRange(result.SkippedReasons.Select(r => Lang.T("window.record.notRecorded", r)));
+            return string.Join("\n", lines);
+        }
+
         private void RecordHistory()
         {
             RecordSummary summary = GuardianHistory.Shared.Record(_results, "Manual scan");
@@ -667,6 +790,7 @@ namespace TimelineBindingGuardian
 
         private void ShowDetails(NodeData node)
         {
+            _selectedNode = node;
             if (node == null)
             {
                 ShowDetailsPlaceholder();
@@ -854,8 +978,52 @@ namespace TimelineBindingGuardian
                 row.Add(remove);
             }
 
+            // この階層で NULL にしている行は、意図的な NULL として共有リストに登録・解除できる
+            bool isNullSetHere = level.LocalState == LocalState.DefinedHere || level.LocalState == LocalState.ExplicitOverride;
+            if (level.ValueState == ValueState.Null && isNullSetHere)
+            {
+                AddIntentionalNullControls(row, level, track);
+            }
+
             row.tooltip = string.IsNullOrEmpty(level.Note) ? level.Owner.AssetPathHint : $"{level.Owner.AssetPathHint}\n{level.Note}";
             return row;
+        }
+
+        private void AddIntentionalNullControls(VisualElement row, LevelBindingState level, TrackLocator track)
+        {
+            string key = BindingIdentity.CreateOwnerLevelKey(level.Owner.AssetGuid, level.Director.GlobalObjectId, track.TimelineGuid, track.TrackFileId);
+            if (!IntentionalNullRegistry.Contains(key))
+            {
+                Button register = new Button(() => OnRegisterIntentionalClicked(level, track, key)) { text = Lang.T("intentional.button.register") };
+                register.tooltip = Lang.T("intentional.button.register.tooltip");
+                row.Add(register);
+                return;
+            }
+
+            Label mark = new Label(Lang.T("intentional.mark"));
+            mark.style.unityTextAlign = TextAnchor.MiddleLeft;
+            mark.style.color = MutedColor;
+            mark.tooltip = Lang.T("intentional.mark.tooltip");
+            row.Add(mark);
+            Button unregister = new Button(() => OnUnregisterIntentionalClicked(key)) { text = Lang.T("intentional.button.unregister") };
+            row.Add(unregister);
+        }
+
+        private static void OnRegisterIntentionalClicked(LevelBindingState level, TrackLocator track, string key)
+        {
+            IntentionalNullDialog.Open(new IntentionalNullEntry(key, level.Owner.AssetPathHint, level.Director.IndexPathHint,
+                track.TimelinePathHint, track.TrackPathHint, string.Empty, string.Empty));
+        }
+
+        private void OnUnregisterIntentionalClicked(string key)
+        {
+            if (!IntentionalNullRegistry.TryRemove(key, out string error))
+            {
+                _statusLabel.text = Lang.T("intentional.error", error);
+                return;
+            }
+
+            ShowDetails(_selectedNode);
         }
 
         private static void OnRemoveOverrideClicked(LevelBindingState level, TrackLocator track)

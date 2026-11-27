@@ -21,6 +21,8 @@ namespace TimelineBindingGuardian
         private const string PeriodLast7Days = "last7Days";
         private const string PeriodSinceDate = "sinceDate";
         private const string PeriodAllTime = "allTime";
+        // ビルド前検査の記録があるときだけ選択肢に出す
+        private const string PeriodSinceLastBuild = "sinceLastBuild";
         private const string AllTypes = "*allTypes";
         private const string BindingChangesOnly = "*bindingChangesOnly";
 
@@ -38,6 +40,8 @@ namespace TimelineBindingGuardian
         private HashSet<string> _contextOwnerLevelKeys = new HashSet<string>();
 
         private Label _storeLabel;
+        private PopupField<string> _periodField;
+        private BuildCheckRecord _latestBuild;
         private TextField _sinceField;
         private VisualElement _contextFilterRow;
         private Label _contextFilterLabel;
@@ -66,6 +70,7 @@ namespace TimelineBindingGuardian
                 selectionType = SelectionType.Single,
                 itemsSource = _visibleEvents,
             };
+            CollectionViewUtility.UseLocalizedEmptyText(_listView);
             _listView.selectionChanged += OnSelectionChanged;
             split.Add(_listView);
             _details = new ScrollView();
@@ -80,6 +85,8 @@ namespace TimelineBindingGuardian
         {
             GuardianHistory history = GuardianHistory.Shared;
             HistoryStore store = history.Store;
+            _latestBuild = store.State.LatestBuild;
+            UpdatePeriodChoices();
             string size = (store.GetTotalSizeBytes() / 1024.0).ToString("0.0", CultureInfo.InvariantCulture);
             _storeLabel.text = store.IsWritable
                 ? Lang.T("views.history.store.writable", store.Directory, size, store.State.Events.Count)
@@ -117,6 +124,30 @@ namespace TimelineBindingGuardian
                 .ToList();
         }
 
+        /// <summary>
+        /// Director の位置（名前＃兄弟の番号）を「記録時点」と分かる形で添える。番号は表示用で、識別には使っていない
+        /// （兄弟が削除されると以後の番号はずれるため、一覧には出さずツールチップと詳細にだけ出す）。
+        /// </summary>
+        public static string AppendPosition(string text, ChangeEvent changeEvent)
+        {
+            string position = changeEvent.Director.IndexPathHint;
+            return string.IsNullOrEmpty(position) ? text : text + "\n" + Lang.T("views.common.position", position);
+        }
+
+        public static void AddPositionLabel(VisualElement container, ChangeEvent changeEvent)
+        {
+            string position = changeEvent.Director.IndexPathHint;
+            if (string.IsNullOrEmpty(position))
+            {
+                return;
+            }
+
+            Label label = new Label(Lang.T("views.common.position", position));
+            label.style.color = MutedColor;
+            label.tooltip = Lang.T("views.common.position.tooltip");
+            container.Add(label);
+        }
+
         public static string FormatLocalTime(string utcText)
         {
             bool parsed = DateTime.TryParse(utcText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime utc);
@@ -126,10 +157,10 @@ namespace TimelineBindingGuardian
         private VisualElement CreateFilterBar()
         {
             Toolbar bar = new Toolbar();
-            PopupField<string> period = new PopupField<string>(PeriodChoices.ToList(), _period, FormatPeriodChoice, FormatPeriodChoice);
-            period.style.width = 120;
-            period.RegisterValueChangedCallback(OnPeriodChanged);
-            bar.Add(period);
+            _periodField = new PopupField<string>(PeriodChoices.ToList(), _period, FormatPeriodChoice, FormatPeriodChoice);
+            _periodField.style.width = 150;
+            _periodField.RegisterValueChangedCallback(OnPeriodChanged);
+            bar.Add(_periodField);
 
             _sinceField = new TextField { value = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) };
             _sinceField.tooltip = Lang.T("views.history.since.tooltip");
@@ -163,10 +194,14 @@ namespace TimelineBindingGuardian
         /// <summary>
         /// 期間フィルタの内部値を表示文字列にする。
         /// </summary>
-        private static string FormatPeriodChoice(string period)
+        private string FormatPeriodChoice(string period)
         {
             switch (period)
             {
+                case PeriodSinceLastBuild:
+                    return _latestBuild == null
+                        ? Lang.T("views.history.period.sinceLastBuild.none")
+                        : Lang.T("views.history.period.sinceLastBuild", FormatLocalTime(_latestBuild.CheckedAtUtc));
                 case PeriodLast24Hours:
                     return Lang.T("views.history.period.last24Hours");
                 case PeriodLast7Days:
@@ -207,6 +242,26 @@ namespace TimelineBindingGuardian
             _contextFilterRow.Add(_contextFilterLabel);
             _contextFilterRow.Add(new Button(OnClearContextClicked) { text = Lang.T("views.common.clear") });
             return _contextFilterRow;
+        }
+
+        /// <summary>
+        /// 「前回ビルド以降」は、ビルド前検査の記録があるときだけ選択肢に出す。記録が無くなったら全期間に戻す。
+        /// </summary>
+        private void UpdatePeriodChoices()
+        {
+            List<string> choices = PeriodChoices.ToList();
+            if (_latestBuild != null)
+            {
+                choices.Insert(choices.Count - 1, PeriodSinceLastBuild);
+            }
+
+            if (_period == PeriodSinceLastBuild && _latestBuild == null)
+            {
+                _period = PeriodAllTime;
+            }
+
+            _periodField.choices = choices;
+            _periodField.SetValueWithoutNotify(_period);
         }
 
         private void OnPeriodChanged(ChangeEvent<string> changeEvent)
@@ -273,6 +328,11 @@ namespace TimelineBindingGuardian
             if (!DateTime.TryParse(changeEvent.ObservedAtUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime observed))
             {
                 return true;
+            }
+
+            if (_period == PeriodSinceLastBuild)
+            {
+                return _latestBuild == null || _latestBuild.IsObservedAfter(changeEvent.ObservedAtUtc);
             }
 
             DateTime threshold;
@@ -342,10 +402,12 @@ namespace TimelineBindingGuardian
         {
             ChangeEvent changeEvent = _visibleEvents[index];
             Label label = (Label)element;
-            label.text = FormatSummary(changeEvent);
-            label.tooltip = label.text;
             bool isLost = changeEvent.ChangeType == ChangeType.BindingLost;
-            label.style.color = isLost ? new StyleColor(AttentionColor) : new StyleColor(StyleKeyword.Null);
+            // 意図的な NULL の共有リストに載っている階層の変化は、印を付けて目立たせない（履歴としては残す）
+            bool isIntentional = isLost && GuardianHistory.Shared.IsIntentional(changeEvent.OwnerLevelKey);
+            label.text = isIntentional ? $"{FormatSummary(changeEvent)}   {Lang.T("intentional.mark")}" : FormatSummary(changeEvent);
+            label.tooltip = AppendPosition(label.text, changeEvent);
+            label.style.color = isLost && !isIntentional ? new StyleColor(AttentionColor) : new StyleColor(StyleKeyword.Null);
         }
 
         private static string FormatSummary(ChangeEvent changeEvent)
@@ -402,9 +464,15 @@ namespace TimelineBindingGuardian
 
             _details.Add(CreateHeader(Lang.T("views.history.details.header", changeEvent.ChangeType, FormatLocalTime(changeEvent.ObservedAtUtc))));
             _details.Add(new Label(Lang.T("views.common.changedAt", changeEvent.Owner, changeEvent.Owner.AssetKind)));
+            if (GuardianHistory.Shared.IsIntentional(changeEvent.OwnerLevelKey))
+            {
+                _details.Add(CreateMutedLabel(Lang.T("intentional.mark.tooltip")));
+            }
+
             if (!string.IsNullOrEmpty(changeEvent.Director.HierarchyPathHint))
             {
                 _details.Add(new Label(Lang.T("views.common.director", changeEvent.Director.HierarchyPathHint)));
+                AddPositionLabel(_details, changeEvent);
                 _details.Add(new Label(Lang.T("views.common.trackTimeline", changeEvent.Track.TrackPathHint, changeEvent.Track.TimelinePathHint)));
                 _details.Add(new Label(Lang.T("views.common.valueAtLevel", FormatValue(changeEvent.Before), FormatValue(changeEvent.After))));
             }

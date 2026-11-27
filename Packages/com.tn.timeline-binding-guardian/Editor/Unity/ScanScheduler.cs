@@ -29,6 +29,9 @@ namespace TimelineBindingGuardian
         public static string DeferReason { get; private set; } = string.Empty;
         public static DateTime LastProcessedLocal { get; private set; }
 
+        // 変化が無いため省いた自動検査の数（確認・テスト用）
+        public static int SkippedUnchangedCount { get; private set; }
+
         public static void Initialize()
         {
             if (_initialized)
@@ -149,6 +152,11 @@ namespace TimelineBindingGuardian
                 return;
             }
 
+            if (IsUnchanged(request.Path))
+            {
+                return;
+            }
+
             ScanResult result = new SceneBindingScanner().Scan(scene);
             Record(result, request);
         }
@@ -157,6 +165,12 @@ namespace TimelineBindingGuardian
         {
             GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(request.Path);
             if (asset == null)
+            {
+                return;
+            }
+
+            // 前回の記録から内容（依存を含む）が変わっていなければ、この Prefab も依存先も検査し直す必要はない
+            if (IsUnchanged(request.Path))
             {
                 return;
             }
@@ -170,6 +184,20 @@ namespace TimelineBindingGuardian
             {
                 EnqueueDependents(request.Path, request.Reason);
             }
+        }
+
+        /// <summary>
+        /// 前回記録したときからファイル内容（依存を含む）が変わっていないか（Phase 5）。変わっていなければ自動検査を省く。
+        /// </summary>
+        internal static bool IsUnchanged(string assetPath)
+        {
+            bool unchanged = GuardianHistory.Shared.IsUnchangedSinceLastRecord(assetPath, ScopeFingerprint.Compute(assetPath));
+            if (unchanged)
+            {
+                SkippedUnchangedCount++;
+            }
+
+            return unchanged;
         }
 
         /// <summary>

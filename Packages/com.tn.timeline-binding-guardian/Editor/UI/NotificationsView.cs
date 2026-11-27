@@ -80,6 +80,7 @@ namespace TimelineBindingGuardian
                 selectionType = SelectionType.Single,
                 itemsSource = _visible,
             };
+            CollectionViewUtility.UseLocalizedEmptyText(_listView);
             _listView.selectionChanged += OnSelectionChanged;
             split.Add(_listView);
             _details = new ScrollView();
@@ -217,7 +218,7 @@ namespace TimelineBindingGuardian
             bool resolved = NotificationRules.IsResolved(changeEvent, _currentValue);
             Label label = (Label)element;
             label.text = FormatSummary(notification, changeEvent, resolved);
-            label.tooltip = label.text;
+            label.tooltip = HistoryView.AppendPosition(label.text, changeEvent);
             label.style.color = GetColor(notification, resolved);
         }
 
@@ -278,6 +279,7 @@ namespace TimelineBindingGuardian
             _details.Add(CreateHeader(Lang.T("views.notifications.details.header", HistoryView.FormatLocalTime(changeEvent.ObservedAtUtc))));
             _details.Add(new Label(Lang.T("views.common.changedAt", changeEvent.Owner, changeEvent.Owner.AssetKind)));
             _details.Add(new Label(Lang.T("views.common.director", changeEvent.Director.HierarchyPathHint)));
+            HistoryView.AddPositionLabel(_details, changeEvent);
             _details.Add(new Label(Lang.T("views.common.trackTimeline", changeEvent.Track.TrackPathHint, changeEvent.Track.TimelinePathHint)));
             _details.Add(new Label(Lang.T("views.common.valueAtLevel", HistoryView.FormatValue(changeEvent.Before), HistoryView.FormatValue(changeEvent.After))));
             _details.Add(new Label(resolved ? Lang.T("views.notifications.state.resolved") : Lang.T("views.notifications.state.unbound")));
@@ -317,7 +319,23 @@ namespace TimelineBindingGuardian
             buttons.Add(new Button(() => PingAsset(timelinePath)) { text = Lang.T("views.notifications.pingTimeline") });
             ChangeEvent captured = changeEvent;
             buttons.Add(new Button(() => RestorePreviewWindow.Open(captured)) { text = Lang.T("views.notifications.restorePreview") });
+
+            // NULL にした階層が分かる通知は、意図的な NULL として共有リストに登録できる（変更元未確定のものは対象外）
+            bool canRegister = !changeEvent.OriginUndetermined && changeEvent.After.ValueState == ValueState.Null;
+            if (canRegister)
+            {
+                Button register = new Button(() => OnRegisterIntentionalClicked(captured)) { text = Lang.T("intentional.button.register") };
+                register.tooltip = Lang.T("intentional.button.register.tooltip");
+                buttons.Add(register);
+            }
+
             _details.Add(buttons);
+        }
+
+        private static void OnRegisterIntentionalClicked(ChangeEvent changeEvent)
+        {
+            IntentionalNullDialog.Open(new IntentionalNullEntry(changeEvent.OwnerLevelKey, changeEvent.Owner.AssetPathHint,
+                changeEvent.Director.IndexPathHint, changeEvent.Track.TimelinePathHint, changeEvent.Track.TrackPathHint, string.Empty, string.Empty));
         }
 
         private void AddAffected(ChangeEvent changeEvent)

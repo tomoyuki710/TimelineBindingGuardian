@@ -14,6 +14,7 @@ namespace TimelineBindingGuardian
         public void SuspendMonitoring()
         {
             // 既存テストは英語の文言で検証するため、テスト中は英語に固定する（終了時に設定の言語へ戻す）
+            Lang.IsTemporarilyOverridden = true;
             Lang.Current = UiLanguage.English;
             BindingChangeMonitor.IsSuspended = true;
             ScanScheduler.ClearPending();
@@ -28,6 +29,7 @@ namespace TimelineBindingGuardian
         private static void ResumeAfterTests()
         {
             GuardianSettings.Instance.ApplyLanguage();
+            Lang.IsTemporarilyOverridden = false;
             ScanScheduler.ClearPending();
             BindingChangeMonitor.IsSuspended = false;
         }

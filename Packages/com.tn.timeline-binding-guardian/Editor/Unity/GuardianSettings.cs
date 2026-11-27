@@ -22,7 +22,9 @@ namespace TimelineBindingGuardian
         [SerializeField] private bool consoleWarningsEnabled = true;
         // 監視・記録から除外するフォルダ（Asset パス）。記録済みの履歴は消さない
         [SerializeField] private List<string> excludedFolders = new List<string>();
-        // 表示言語（既定は Unity の表示言語に合わせる）
+        // ビルド開始時の検査（Phase 5）。ビルドは止めない
+        [SerializeField] private bool preBuildCheckEnabled = true;
+        // 表示言語（既定は OS の言語設定に合わせる）
         [SerializeField] private LanguagePreference language = LanguagePreference.Auto;
 
         public static event Action Changed;
@@ -87,6 +89,12 @@ namespace TimelineBindingGuardian
         {
             get => consoleWarningsEnabled;
             set => SetValue(ref consoleWarningsEnabled, value);
+        }
+
+        public bool PreBuildCheckEnabled
+        {
+            get => preBuildCheckEnabled;
+            set => SetValue(ref preBuildCheckEnabled, value);
         }
 
         public IReadOnlyList<string> ExcludedFolders => excludedFolders ?? (excludedFolders = new List<string>());

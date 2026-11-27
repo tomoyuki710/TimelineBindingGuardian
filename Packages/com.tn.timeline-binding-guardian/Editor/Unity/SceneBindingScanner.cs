@@ -18,6 +18,11 @@ namespace TimelineBindingGuardian
     {
         private readonly Dictionary<int, DirectorBindingTable> _tableCache = new Dictionary<int, DirectorBindingTable>();
         private readonly PrefabOverrideInspector _overrideInspector = new PrefabOverrideInspector();
+        // 以下は 1 回の検査の中で同じ値を何度も計算しないためのキャッシュ（Prefab Asset 側の Director やバインド先は、多数の Scene 内 Director で共有される）
+        private readonly Dictionary<int, LevelInfo> _levelInfoCache = new Dictionary<int, LevelInfo>();
+        private readonly Dictionary<int, TargetLocator> _targetCache = new Dictionary<int, TargetLocator>();
+        private readonly Dictionary<int, TimelineInfo> _timelineCache = new Dictionary<int, TimelineInfo>();
+        private readonly Dictionary<(int, int), TrackLocator> _trackCache = new Dictionary<(int, int), TrackLocator>();
 
         public List<ScanResult> ScanLoadedScenes()
         {
@@ -57,7 +62,14 @@ namespace TimelineBindingGuardian
                 diagnostics.Add(Lang.T("engine.scan.dirtyScene"));
             }
 
-            return new ScanResult(owner, GetUtcNow(), directors, diagnostics, scene.isDirty);
+            ScanResult result = new ScanResult(owner, GetUtcNow(), directors, diagnostics, scene.isDirty);
+            bool isSavedState = owner.IsSaved && !scene.isDirty;
+            if (isSavedState)
+            {
+                result.SourceFingerprint = ScopeFingerprint.Compute(scene.path);
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -80,7 +92,13 @@ namespace TimelineBindingGuardian
                 }
             }
 
-            return new ScanResult(PrefabContextResolver.CreateAssetLocator(assetPath), GetUtcNow(), directors, diagnostics);
+            ScanResult prefabResult = new ScanResult(PrefabContextResolver.CreateAssetLocator(assetPath), GetUtcNow(), directors, diagnostics);
+            if (root != null)
+            {
+                prefabResult.SourceFingerprint = ScopeFingerprint.Compute(assetPath);
+            }
+
+            return prefabResult;
         }
 
         private DirectorObservation Observe(PlayableDirector director, bool isSceneContext)
@@ -99,22 +117,25 @@ namespace TimelineBindingGuardian
                 return new DirectorObservation(locator, owner, null, director.gameObject.activeInHierarchy, director.enabled, instanceChain, tracks, diagnostics);
             }
 
-            AssetLocator timelineLocator = PrefabContextResolver.CreateAssetLocator(AssetDatabase.GetAssetPath(timeline));
+            TimelineInfo timelineInfo = GetTimelineInfo(timeline);
             List<PlayableDirector> chain = PrefabContextResolver.GetSourceChain(director);
             List<DirectorBindingTable> tables = new List<DirectorBindingTable>();
+            List<LevelInfo> infos = new List<LevelInfo>();
             for (int i = 0; i < chain.Count; i++)
             {
                 DirectorBindingTable table = GetTable(chain[i]);
+                LevelInfo info = GetLevelInfo(chain[i]);
                 tables.Add(table);
-                AddTableDiagnostics(diagnostics, i, chain[i], table);
+                infos.Add(info);
+                AddTableDiagnostics(diagnostics, i, info.Owner, table);
             }
 
-            foreach (TrackAsset track in BindingReader.GetBindableTracks(timeline))
+            foreach (TrackAsset track in timelineInfo.BindableTracks)
             {
-                tracks.Add(ObserveTrack(timeline, timelineLocator, track, chain, tables));
+                tracks.Add(ObserveTrack(timeline, timelineInfo.Locator, track, chain, tables, infos));
             }
 
-            return new DirectorObservation(locator, owner, timelineLocator, director.gameObject.activeInHierarchy, director.enabled, instanceChain, tracks, diagnostics);
+            return new DirectorObservation(locator, owner, timelineInfo.Locator, director.gameObject.activeInHierarchy, director.enabled, instanceChain, tracks, diagnostics);
         }
 
         private TrackBindingObservation ObserveTrack(
@@ -122,17 +143,18 @@ namespace TimelineBindingGuardian
             AssetLocator timelineLocator,
             TrackAsset track,
             List<PlayableDirector> chain,
-            List<DirectorBindingTable> tables)
+            List<DirectorBindingTable> tables,
+            List<LevelInfo> infos)
         {
             List<LevelBindingState> levels = new List<LevelBindingState>();
             for (int i = 0; i < chain.Count; i++)
             {
                 PlayableDirector source = i + 1 < chain.Count ? chain[i + 1] : null;
                 DirectorBindingTable sourceTable = i + 1 < chain.Count ? tables[i + 1] : null;
-                levels.Add(ObserveLevel(i, timeline, track, chain[i], tables[i], source, sourceTable));
+                levels.Add(ObserveLevel(i, timeline, track, chain[i], tables[i], infos[i], source, sourceTable));
             }
 
-            TrackLocator trackLocator = CreateTrackLocator(timeline, timelineLocator, track);
+            TrackLocator trackLocator = GetTrackLocator(timeline, timelineLocator, track);
             string key = BindingIdentity.CreateBindingKey(levels[0].Director.GlobalObjectId, trackLocator.TimelineGuid, trackLocator.TrackFileId);
             TrackBindingObservation observation = new TrackBindingObservation(key, trackLocator, levels);
             BindingOriginAnalyzer.Analyze(observation);
@@ -145,12 +167,13 @@ namespace TimelineBindingGuardian
             TrackAsset track,
             PlayableDirector director,
             DirectorBindingTable table,
+            LevelInfo info,
             PlayableDirector source,
             DirectorBindingTable sourceTable)
         {
-            AssetLocator owner = PrefabContextResolver.GetOwner(director);
-            ContextKind contextKind = PrefabContextResolver.GetContextKind(director);
-            DirectorLocator directorLocator = PrefabContextResolver.CreateDirectorLocator(director);
+            AssetLocator owner = info.Owner;
+            ContextKind contextKind = info.ContextKind;
+            DirectorLocator directorLocator = info.Locator;
 
             if (director.playableAsset != timeline)
             {
@@ -271,9 +294,21 @@ namespace TimelineBindingGuardian
             return entry.IsMissing ? ValueState.MissingReference : ValueState.Null;
         }
 
-        private static TargetLocator CreateTarget(ValueState valueState, BindingEntry entry)
+        private TargetLocator CreateTarget(ValueState valueState, BindingEntry entry)
         {
-            return valueState == ValueState.Bound ? PrefabContextResolver.CreateTargetLocator(entry.Value) : TargetLocator.None;
+            if (valueState != ValueState.Bound)
+            {
+                return TargetLocator.None;
+            }
+
+            int key = entry.Value.GetInstanceID();
+            if (!_targetCache.TryGetValue(key, out TargetLocator target))
+            {
+                target = PrefabContextResolver.CreateTargetLocator(entry.Value);
+                _targetCache.Add(key, target);
+            }
+
+            return target;
         }
 
         private static TrackLocator CreateTrackLocator(TimelineAsset timeline, AssetLocator timelineLocator, TrackAsset track)
@@ -306,6 +341,47 @@ namespace TimelineBindingGuardian
             return path;
         }
 
+        private LevelInfo GetLevelInfo(PlayableDirector director)
+        {
+            int key = director.GetInstanceID();
+            if (!_levelInfoCache.TryGetValue(key, out LevelInfo info))
+            {
+                info = new LevelInfo(
+                    PrefabContextResolver.GetOwner(director),
+                    PrefabContextResolver.GetContextKind(director),
+                    PrefabContextResolver.CreateDirectorLocator(director));
+                _levelInfoCache.Add(key, info);
+            }
+
+            return info;
+        }
+
+        private TimelineInfo GetTimelineInfo(TimelineAsset timeline)
+        {
+            int key = timeline.GetInstanceID();
+            if (!_timelineCache.TryGetValue(key, out TimelineInfo info))
+            {
+                info = new TimelineInfo(
+                    PrefabContextResolver.CreateAssetLocator(AssetDatabase.GetAssetPath(timeline)),
+                    new List<TrackAsset>(BindingReader.GetBindableTracks(timeline)));
+                _timelineCache.Add(key, info);
+            }
+
+            return info;
+        }
+
+        private TrackLocator GetTrackLocator(TimelineAsset timeline, AssetLocator timelineLocator, TrackAsset track)
+        {
+            (int, int) key = (timeline.GetInstanceID(), track.GetInstanceID());
+            if (!_trackCache.TryGetValue(key, out TrackLocator locator))
+            {
+                locator = CreateTrackLocator(timeline, timelineLocator, track);
+                _trackCache.Add(key, locator);
+            }
+
+            return locator;
+        }
+
         private DirectorBindingTable GetTable(PlayableDirector director)
         {
             int key = director.GetInstanceID();
@@ -319,9 +395,9 @@ namespace TimelineBindingGuardian
             return table;
         }
 
-        private static void AddTableDiagnostics(List<string> diagnostics, int level, PlayableDirector director, DirectorBindingTable table)
+        private static void AddTableDiagnostics(List<string> diagnostics, int level, AssetLocator ownerLocator, DirectorBindingTable table)
         {
-            string owner = PrefabContextResolver.GetOwner(director).ToString();
+            string owner = ownerLocator.ToString();
             if (!table.ArrayFound)
             {
                 diagnostics.Add(Lang.T("engine.scan.sceneBindingsNotFound", level, owner));
@@ -341,6 +417,38 @@ namespace TimelineBindingGuardian
         private static string GetUtcNow()
         {
             return DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Director（ある階層）ごとに一定の値。Track ごとに計算し直さない。
+        /// </summary>
+        private sealed class LevelInfo
+        {
+            public LevelInfo(AssetLocator owner, ContextKind contextKind, DirectorLocator locator)
+            {
+                Owner = owner;
+                ContextKind = contextKind;
+                Locator = locator;
+            }
+
+            public AssetLocator Owner { get; }
+            public ContextKind ContextKind { get; }
+            public DirectorLocator Locator { get; }
+        }
+
+        /// <summary>
+        /// Timeline ごとに一定の値。
+        /// </summary>
+        private sealed class TimelineInfo
+        {
+            public TimelineInfo(AssetLocator locator, List<TrackAsset> bindableTracks)
+            {
+                Locator = locator;
+                BindableTracks = bindableTracks;
+            }
+
+            public AssetLocator Locator { get; }
+            public List<TrackAsset> BindableTracks { get; }
         }
     }
 }

@@ -36,17 +36,22 @@ namespace TimelineBindingGuardian
             bool isInitialScope = !state.Scopes.Any(s => s.ScopeGuid == observation.ScopeGuid);
             Dictionary<string, ChangeEvent> ownerEvents = ApplyOwnerLevels(state, observation, result);
 
+            bool contextsChanged = true;
             if (isInitialScope)
             {
                 ApplyInitialScope(state, observation, result);
             }
             else
             {
-                ApplyScopeDiff(state, observation, ownerEvents, result);
+                contextsChanged = ApplyScopeDiff(state, observation, ownerEvents, result);
             }
 
             UpdateScopeRecord(state, observation);
-            result.ChangedScopeGuids.Add(observation.ScopeGuid);
+            // 文脈が 1 件も変わっていなければ、その Scope の文脈の区画は書き直さない（最終観測時刻は manifest の ScopeRecord に残る）
+            if (contextsChanged)
+            {
+                result.ChangedScopeGuids.Add(observation.ScopeGuid);
+            }
             result.ChangedObservationIds.Add(observation.ObservationId);
             foreach (ChangeEvent updated in result.UpdatedEvents)
             {
@@ -162,7 +167,8 @@ namespace TimelineBindingGuardian
             AddNewEvent(state, result, initial);
         }
 
-        private static void ApplyScopeDiff(HistoryState state, ScopeObservation observation, Dictionary<string, ChangeEvent> ownerEvents, DiffResult result)
+        /// <returns>この Scope の文脈（保存内容）が変わったか。</returns>
+        private static bool ApplyScopeDiff(HistoryState state, ScopeObservation observation, Dictionary<string, ChangeEvent> ownerEvents, DiffResult result)
         {
             List<ContextSnapshot> previousContexts = state.Contexts.Where(c => c.ScopeGuid == observation.ScopeGuid).ToList();
             Dictionary<string, ContextSnapshot> previousByKey = previousContexts.ToDictionary(c => c.BindingKey);
@@ -176,8 +182,20 @@ namespace TimelineBindingGuardian
             Dictionary<string, HashSet<string>> currentTimelines = GroupTimelinesByDirector(observation.Contexts);
             HashSet<string> timelineChanged = DetectTimelineChanges(state, observation, previousTimelines, currentTimelines, previousContexts, result);
 
-            ApplyRemovals(state, observation, previousContexts, currentByKey, currentTimelines, timelineChanged, result);
-            ApplyAdditionsAndChanges(state, observation, previousByKey, previousTimelines, timelineChanged, ownerEvents, result);
+            bool removed = ApplyRemovals(state, observation, previousContexts, currentByKey, currentTimelines, timelineChanged, result);
+
+            // 置き換え先の位置を辞書で引く（文脈ごとに全件を走査しないため。削除の後に作る）
+            Dictionary<string, int> indexByKey = new Dictionary<string, int>();
+            for (int i = 0; i < state.Contexts.Count; i++)
+            {
+                if (state.Contexts[i].ScopeGuid == observation.ScopeGuid)
+                {
+                    indexByKey[state.Contexts[i].BindingKey] = i;
+                }
+            }
+
+            bool changed = ApplyAdditionsAndChanges(state, observation, previousByKey, indexByKey, previousTimelines, timelineChanged, ownerEvents, result);
+            return removed || changed;
         }
 
         private static HashSet<string> DetectTimelineChanges(
@@ -207,7 +225,7 @@ namespace TimelineBindingGuardian
             return changed;
         }
 
-        private static void ApplyRemovals(
+        private static bool ApplyRemovals(
             HistoryState state,
             ScopeObservation observation,
             List<ContextSnapshot> previousContexts,
@@ -217,6 +235,7 @@ namespace TimelineBindingGuardian
             DiffResult result)
         {
             HashSet<string> removedDirectors = new HashSet<string>();
+            HashSet<ContextSnapshot> removed = new HashSet<ContextSnapshot>();
             foreach (ContextSnapshot previous in previousContexts)
             {
                 if (currentByKey.ContainsKey(previous.BindingKey))
@@ -224,7 +243,7 @@ namespace TimelineBindingGuardian
                     continue;
                 }
 
-                state.Contexts.Remove(previous);
+                removed.Add(previous);
                 string director = previous.DirectorGlobalObjectId;
                 if (timelineChanged.Contains(director))
                 {
@@ -243,23 +262,29 @@ namespace TimelineBindingGuardian
                         previous.Director, previous.Track, LevelValue.None, LevelValue.None, false, string.Empty));
                 }
             }
+
+            // 1 件ずつ Remove すると全件走査になるため、まとめて取り除く
+            state.Contexts.RemoveAll(removed.Contains);
+            return removed.Count > 0;
         }
 
-        private static void ApplyAdditionsAndChanges(
+        private static bool ApplyAdditionsAndChanges(
             HistoryState state,
             ScopeObservation observation,
             Dictionary<string, ContextSnapshot> previousByKey,
+            Dictionary<string, int> indexByKey,
             Dictionary<string, HashSet<string>> previousTimelines,
             HashSet<string> timelineChanged,
             Dictionary<string, ChangeEvent> ownerEvents,
             DiffResult result)
         {
             HashSet<string> addedDirectors = new HashSet<string>();
+            bool changed = false;
             foreach (ContextSnapshot current in observation.Contexts)
             {
                 if (previousByKey.TryGetValue(current.BindingKey, out ContextSnapshot previous))
                 {
-                    ApplyContextChange(state, observation, previous, current, ownerEvents, result);
+                    changed |= ApplyContextChange(state, observation, previous, indexByKey[current.BindingKey], current, ownerEvents, result);
                     continue;
                 }
 
@@ -268,6 +293,7 @@ namespace TimelineBindingGuardian
                 {
                     current.SetObservation(observation.ObservationId, observation.ObservedAtUtc);
                     state.Contexts.Add(current.CreateStorageCopy());
+                    changed = true;
                 }
 
                 if (timelineChanged.Contains(director))
@@ -286,12 +312,16 @@ namespace TimelineBindingGuardian
                         current.Director, current.Track, LevelValue.None, LevelValue.None, false, string.Empty));
                 }
             }
+
+            return changed;
         }
 
-        private static void ApplyContextChange(
+        /// <returns>保存する文脈の内容が変わったか（観測時刻だけの違いは変化に数えない）。</returns>
+        private static bool ApplyContextChange(
             HistoryState state,
             ScopeObservation observation,
             ContextSnapshot previous,
+            int previousIndex,
             ContextSnapshot current,
             Dictionary<string, ChangeEvent> ownerEvents,
             DiffResult result)
@@ -299,27 +329,33 @@ namespace TimelineBindingGuardian
             if (current.IsUncertain)
             {
                 // 旧値を保持し、不明になった最初の 1 回だけ記録する
-                if (string.IsNullOrEmpty(previous.UnknownSinceUtc))
+                if (!string.IsNullOrEmpty(previous.UnknownSinceUtc))
                 {
-                    previous.SetUnknownSince(observation.ObservedAtUtc);
-                    ChangeEvent unresolved = CreateEvent(observation, ChangeType.Unresolved, current.BindingKey, CreateScopeLocator(observation),
-                        current.Director, current.Track, previous.Effective, LevelValue.None, true, Lang.Note("engine.note.unresolved"));
-                    unresolved.AddAffectedContext(CreateAffected(observation, previous, current, string.Empty));
-                    AddNewEvent(state, result, unresolved);
+                    return false;
                 }
 
-                return;
+                previous.SetUnknownSince(observation.ObservedAtUtc);
+                ChangeEvent unresolved = CreateEvent(observation, ChangeType.Unresolved, current.BindingKey, CreateScopeLocator(observation),
+                    current.Director, current.Track, previous.Effective, LevelValue.None, true, Lang.Note("engine.note.unresolved"));
+                unresolved.AddAffectedContext(CreateAffected(observation, previous, current, string.Empty));
+                AddNewEvent(state, result, unresolved);
+                return true;
             }
 
-            string note = string.IsNullOrEmpty(previous.UnknownSinceUtc)
-                ? string.Empty
-                : Lang.Note("engine.note.unknownPeriod", previous.UnknownSinceUtc);
+            // 内容が同じなら置き換えない（前回の記録をそのまま残し、区画を書き直さない）
+            bool wasUnknown = !string.IsNullOrEmpty(previous.UnknownSinceUtc);
+            if (!wasUnknown && current.HasSameStoredContent(previous))
+            {
+                return false;
+            }
+
+            string note = wasUnknown ? Lang.Note("engine.note.unknownPeriod", previous.UnknownSinceUtc) : string.Empty;
             current.SetObservation(observation.ObservationId, observation.ObservedAtUtc);
-            state.Contexts[state.Contexts.IndexOf(previous)] = current.CreateStorageCopy();
+            state.Contexts[previousIndex] = current.CreateStorageCopy();
 
             if (previous.Effective.HasSameValue(current.Effective))
             {
-                return;
+                return true;
             }
 
             AffectedContext affected = CreateAffected(observation, previous, current, note);
@@ -331,7 +367,7 @@ namespace TimelineBindingGuardian
                     Lang.Note("engine.note.originUndetermined"));
                 undetermined.AddAffectedContext(affected);
                 AddNewEvent(state, result, undetermined);
-                return;
+                return true;
             }
 
             ChangeEvent ownerEvent = FindOrCreateOwnerEvent(state, observation, ownerEvents, source, sourceBefore, current, result);
@@ -341,6 +377,8 @@ namespace TimelineBindingGuardian
             {
                 result.UpdatedEvents.Add(ownerEvent);
             }
+
+            return true;
         }
 
         /// <summary>
@@ -466,7 +504,7 @@ namespace TimelineBindingGuardian
         private static void UpdateScopeRecord(HistoryState state, ScopeObservation observation)
         {
             state.Scopes.RemoveAll(s => s.ScopeGuid == observation.ScopeGuid);
-            state.Scopes.Add(new ScopeRecord(observation.ScopeGuid, observation.ScopePathHint, observation.ObservedAtUtc, observation.ObservationId));
+            state.Scopes.Add(new ScopeRecord(observation.ScopeGuid, observation.ScopePathHint, observation.ObservedAtUtc, observation.ObservationId, observation.Fingerprint));
         }
 
         private static void AddNewEvent(HistoryState state, DiffResult result, ChangeEvent changeEvent)

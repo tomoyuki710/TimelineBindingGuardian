@@ -88,6 +88,12 @@ namespace TimelineBindingGuardian
             this.assetKind = assetKind;
         }
 
+        /// <summary>保存される全項目が同じか（文脈の比較用）。</summary>
+        public bool HasSameContent(AssetLocator other)
+        {
+            return other != null && ContentComparison.Same(assetGuid, other.assetGuid) && ContentComparison.Same(assetPathHint, other.assetPathHint) && assetKind == other.assetKind;
+        }
+
         public string AssetGuid => assetGuid;
         public string AssetPathHint => assetPathHint;
         public AssetKind AssetKind => assetKind;
@@ -119,6 +125,13 @@ namespace TimelineBindingGuardian
             this.hierarchyPathHint = hierarchyPathHint ?? string.Empty;
             this.indexPathHint = indexPathHint ?? string.Empty;
             this.componentIndexHint = componentIndexHint;
+        }
+
+        /// <summary>保存される全項目が同じか（文脈の比較用）。</summary>
+        public bool HasSameContent(DirectorLocator other)
+        {
+            bool sameIds = other != null && ContentComparison.Same(globalObjectId, other.globalObjectId) && componentIndexHint == other.componentIndexHint;
+            return sameIds && ContentComparison.Same(hierarchyPathHint, other.hierarchyPathHint) && ContentComparison.Same(indexPathHint, other.indexPathHint);
         }
 
         public string GlobalObjectId => globalObjectId;
@@ -154,6 +167,14 @@ namespace TimelineBindingGuardian
             this.trackType = trackType ?? string.Empty;
             this.trackPathHint = trackPathHint ?? string.Empty;
             this.outputTargetType = outputTargetType ?? string.Empty;
+        }
+
+        /// <summary>保存される全項目が同じか（文脈の比較用）。</summary>
+        public bool HasSameContent(TrackLocator other)
+        {
+            bool sameIds = other != null && ContentComparison.Same(timelineGuid, other.timelineGuid) && ContentComparison.Same(trackFileId, other.trackFileId);
+            bool sameTypes = sameIds && ContentComparison.Same(trackType, other.trackType) && ContentComparison.Same(outputTargetType, other.outputTargetType);
+            return sameTypes && ContentComparison.Same(timelinePathHint, other.timelinePathHint) && ContentComparison.Same(trackPathHint, other.trackPathHint);
         }
 
         public string TimelineGuid => timelineGuid;
@@ -433,5 +454,8 @@ namespace TimelineBindingGuardian
         public string ScannedAtUtc => scannedAtUtc;
         public IReadOnlyList<DirectorObservation> Directors => directors;
         public IReadOnlyList<string> Diagnostics => diagnostics;
+
+        // 検査時点のファイル内容の指紋（保存済みで未保存の変更が無いときだけ。変化が無ければ次の自動検査を省くために記録する）
+        public string SourceFingerprint { get; set; } = string.Empty;
     }
 }

@@ -34,6 +34,10 @@ namespace TimelineBindingGuardian
 
         public static UiLanguage Current { get; set; } = UiLanguage.English;
 
+        // テストの実行中など、表示言語を一時的に上書きしている間は true。ウィンドウはこの間の表示更新を止め、終了後に更新し直す
+        // （上書き中の言語で作られた文言が一瞬表示されないように）
+        public static bool IsTemporarilyOverridden { get; set; }
+
         public static IReadOnlyDictionary<string, (string En, string Ja)> Table => _table ?? (_table = LangTable.Build());
 
         /// <summary>
@@ -104,6 +108,7 @@ namespace TimelineBindingGuardian
             AddViews(table);
             AddRestore(table);
             AddEngine(table);
+            AddPhase5(table);
             return table;
         }
 
@@ -114,6 +119,8 @@ namespace TimelineBindingGuardian
         static partial void AddRestore(Dictionary<string, (string En, string Ja)> table);
 
         static partial void AddEngine(Dictionary<string, (string En, string Ja)> table);
+
+        static partial void AddPhase5(Dictionary<string, (string En, string Ja)> table);
 
         private static void AddCommon(Dictionary<string, (string En, string Ja)> table)
         {

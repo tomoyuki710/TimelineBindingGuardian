@@ -21,6 +21,8 @@ namespace TimelineBindingGuardian
         public List<string> SkippedReasons { get; } = new List<string>();
         public List<ChangeEvent> NewEvents { get; } = new List<ChangeEvent>();
         public List<NotificationRecord> NewNotifications { get; } = new List<NotificationRecord>();
+        // 記録した観測の ID（ビルド前検査の記録に使う）
+        public List<string> ObservationIds { get; } = new List<string>();
         // 保存で書き出したバイト数・ファイル数（変化した区画のみ書き直すため、規模に比例しない）
         public long WrittenBytes { get; set; }
         public int WrittenFileCount { get; set; }
@@ -29,6 +31,7 @@ namespace TimelineBindingGuardian
         {
             NewEvents.Clear();
             NewNotifications.Clear();
+            ObservationIds.Clear();
             NewEventCount = 0;
             UpdatedEventCount = 0;
         }
@@ -43,12 +46,15 @@ namespace TimelineBindingGuardian
     {
         private static GuardianHistory _shared;
         private readonly Func<string, bool> _isExcluded;
+        private readonly Func<string, bool> _isIntentional;
 
         /// <param name="isExcluded">記録から除外するパスの判定。null なら除外しない（テスト用の履歴など）。</param>
-        public GuardianHistory(HistoryStore store, Func<string, bool> isExcluded = null)
+        /// <param name="isIntentional">意図的な NULL の共有リストに載っている Owner 階層キーか（通知しない）。null なら判定しない。</param>
+        public GuardianHistory(HistoryStore store, Func<string, bool> isExcluded = null, Func<string, bool> isIntentional = null)
         {
             Store = store;
             _isExcluded = isExcluded ?? (path => false);
+            _isIntentional = isIntentional ?? (key => false);
         }
 
         /// <summary>
@@ -70,7 +76,7 @@ namespace TimelineBindingGuardian
                     HistoryStore store = new HistoryStore(DefaultDirectory, PlayerSettings.productGUID.ToString());
                     store.Load();
                     // プロジェクトの履歴は設定の除外フォルダに従う
-                    _shared = new GuardianHistory(store, path => GuardianSettings.Instance.IsExcluded(path));
+                    _shared = new GuardianHistory(store, path => GuardianSettings.Instance.IsExcluded(path), IntentionalNullRegistry.Contains);
                 }
 
                 return _shared;
@@ -139,6 +145,45 @@ namespace TimelineBindingGuardian
         }
 
         /// <summary>
+        /// 前回記録したときからファイル内容（依存を含む）が変わっていないか（Phase 5）。変わっていなければ自動検査を省ける。
+        /// 一度も記録していない、指紋が無い（以前の版で記録した）場合は false。
+        /// </summary>
+        public bool IsUnchangedSinceLastRecord(string assetPath, string fingerprint)
+        {
+            if (string.IsNullOrEmpty(fingerprint))
+            {
+                return false;
+            }
+
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            ScopeRecord scope = Store.State.Scopes.FirstOrDefault(s => s.ScopeGuid == guid);
+            return scope != null && scope.Fingerprint == fingerprint;
+        }
+
+        /// <summary>
+        /// ビルド前検査の記録を保存する（manifest だけを書き直す）。
+        /// </summary>
+        public bool RecordBuild(BuildCheckRecord record, out string error)
+        {
+            error = string.Empty;
+            if (!Store.IsWritable)
+            {
+                error = Lang.T("engine.store.readOnly", Store.ErrorMessage);
+                return false;
+            }
+
+            Store.State.AddBuild(record);
+            if (!Store.TryCommit(Store.State, new HistoryChangeSet(), out error))
+            {
+                Store.Load();
+                return false;
+            }
+
+            Changed?.Invoke();
+            return true;
+        }
+
+        /// <summary>
         /// 通知を消去する。履歴・現在の状態・今後のイベントには影響しない。
         /// </summary>
         public bool Dismiss(IEnumerable<string> eventIds, out string error)
@@ -177,7 +222,10 @@ namespace TimelineBindingGuardian
             foreach (NotificationRecord record in Store.State.Notifications)
             {
                 bool visible = includeDismissed || record.IsUnread;
-                if (visible && events.TryGetValue(record.EventId, out ChangeEvent changeEvent))
+                ChangeEvent changeEvent = null;
+                bool found = visible && events.TryGetValue(record.EventId, out changeEvent);
+                // 共有リストで意図的とされた階層の通知は、登録前に出ていたものも表示しない
+                if (found && !_isIntentional(changeEvent.OwnerLevelKey))
                 {
                     result.Add((record, changeEvent));
                 }
@@ -185,6 +233,14 @@ namespace TimelineBindingGuardian
 
             EnsureLoadedForResolution(result.Select(r => r.Item2));
             return result.OrderByDescending(r => r.Item2.ObservedAtUtc, StringComparer.Ordinal).ToList();
+        }
+
+        /// <summary>
+        /// 意図的な NULL の共有リストに載っている階層か（表示用）。
+        /// </summary>
+        public bool IsIntentional(string ownerLevelKey)
+        {
+            return _isIntentional(ownerLevelKey);
         }
 
         public Func<string, LevelValue> CreateCurrentValueLookup()
@@ -226,11 +282,11 @@ namespace TimelineBindingGuardian
             string observationId = Guid.NewGuid().ToString("N");
             string observedAtUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             ScopeObservation observation = new ScopeObservation(observationId, observedAtUtc, reason,
-                result.Owner.AssetGuid, result.Owner.AssetPathHint, contexts, result.Owner.AssetKind);
+                result.Owner.AssetGuid, result.Owner.AssetPathHint, contexts, result.Owner.AssetKind, result.SourceFingerprint);
             DiffResult diff = BindingDiffEngine.Apply(Store.State, observation);
             changes.Add(diff);
 
-            List<NotificationRecord> created = NotificationRules.CreateForNewEvents(Store.State, diff.NewEvents, observedAtUtc);
+            List<NotificationRecord> created = NotificationRules.CreateForNewEvents(Store.State, diff.NewEvents, observedAtUtc, _isIntentional);
             changes.NotificationsChanged |= created.Count > 0;
 
             summary.RecordedScopeCount++;
@@ -238,6 +294,7 @@ namespace TimelineBindingGuardian
             summary.UpdatedEventCount += diff.UpdatedEvents.Count;
             summary.NewEvents.AddRange(diff.NewEvents);
             summary.NewNotifications.AddRange(created);
+            summary.ObservationIds.Add(observationId);
         }
 
         private bool TryGetSkipReason(ScanResult result, out string reason)

@@ -70,6 +70,14 @@ namespace TimelineBindingGuardian
         /// <summary>
         /// 値（状態と対象 ID）が同じか。LocalState・表示ヒントは含めない。
         /// </summary>
+        /// <summary>保存される全項目が同じか（文脈の比較用）。</summary>
+        public bool HasSameContent(LevelValue other)
+        {
+            bool sameStates = other != null && valueState == other.valueState && localState == other.localState;
+            bool sameTarget = sameStates && ContentComparison.Same(targetGlobalObjectId, other.targetGlobalObjectId);
+            return sameTarget && ContentComparison.Same(targetHint, other.targetHint) && ContentComparison.Same(targetType, other.targetType);
+        }
+
         public bool HasSameValue(LevelValue other)
         {
             return other != null && valueState == other.valueState && targetGlobalObjectId == other.targetGlobalObjectId;
@@ -117,6 +125,14 @@ namespace TimelineBindingGuardian
         /// <summary>
         /// この階層自身の定義が同じか（Inherited 同士は値に関係なく同じ）。
         /// </summary>
+        /// <summary>保存される全項目が同じか（文脈の比較用）。</summary>
+        public bool HasSameContent(LevelSnapshot other)
+        {
+            bool sameKey = other != null && ContentComparison.Same(ownerLevelKey, other.ownerLevelKey) && contribution == other.contribution;
+            bool sameLocators = sameKey && owner.HasSameContent(other.owner) && director.HasSameContent(other.director);
+            return sameLocators && value.HasSameContent(other.value);
+        }
+
         public bool HasSameContribution(LevelSnapshot other)
         {
             if (other == null || contribution != other.contribution)
@@ -224,6 +240,45 @@ namespace TimelineBindingGuardian
             copy.SetObservation(observationId, observedAtUtc);
             copy.SetUnknownSince(unknownSinceUtc);
             return copy;
+        }
+
+        /// <summary>
+        /// 保存済みの文脈（stored）と、観測時刻を除いて同じ内容か。同じなら置き換えず、区画を書き直さない。
+        /// 保存用の複製（CreateStorageCopy）と比べる。観測時刻（observationId / observedAtUtc / unknownSinceUtc）以外の保存項目はすべて比べる
+        /// （項目を追加したら各 HasSameContent にも追加すること。漏れはテストで検出する）。
+        /// </summary>
+        public bool HasSameStoredContent(ContextSnapshot stored)
+        {
+            if (stored == null)
+            {
+                return false;
+            }
+
+            ContextSnapshot copy = CreateStorageCopy();
+            bool sameKeys = ContentComparison.Same(copy.bindingKey, stored.bindingKey) && ContentComparison.Same(copy.scopeGuid, stored.scopeGuid);
+            bool sameFlags = copy.originLevel == stored.originLevel && copy.isUncertain == stored.isUncertain;
+            bool sameHeader = sameKeys && sameFlags && ContentComparison.Same(copy.scopePathHint, stored.scopePathHint);
+            bool sameLocators = sameHeader && copy.director.HasSameContent(stored.director) && copy.track.HasSameContent(stored.track);
+            if (!sameLocators || !copy.effective.HasSameContent(stored.effective))
+            {
+                return false;
+            }
+
+            int storedCount = stored.levels?.Count ?? 0;
+            if (copy.levels.Count != storedCount)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < storedCount; i++)
+            {
+                if (!copy.levels[i].HasSameContent(stored.levels[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static DirectorLocator EmptyDirector => new DirectorLocator(string.Empty, string.Empty, string.Empty, -1);
@@ -429,8 +484,12 @@ namespace TimelineBindingGuardian
         [SerializeField] private string lastObservedAtUtc;
         [SerializeField] private string lastObservationId;
 
-        public ScopeRecord(string scopeGuid, string scopePathHint, string lastObservedAtUtc, string lastObservationId)
+        // 最後に記録したときのファイル内容の指紋（Phase 5、任意項目）。同じなら自動検査を省く
+        [SerializeField] private string fingerprint;
+
+        public ScopeRecord(string scopeGuid, string scopePathHint, string lastObservedAtUtc, string lastObservationId, string fingerprint = "")
         {
+            this.fingerprint = fingerprint ?? string.Empty;
             this.scopeGuid = scopeGuid;
             this.scopePathHint = scopePathHint ?? string.Empty;
             this.lastObservedAtUtc = lastObservedAtUtc;
@@ -441,6 +500,7 @@ namespace TimelineBindingGuardian
         public string ScopePathHint => scopePathHint;
         public string LastObservedAtUtc => lastObservedAtUtc;
         public string LastObservationId => lastObservationId;
+        public string Fingerprint => fingerprint ?? string.Empty;
     }
 
     [Serializable]
@@ -493,6 +553,10 @@ namespace TimelineBindingGuardian
         [SerializeField] private List<ObservationRecord> observations = new List<ObservationRecord>();
         [SerializeField] private List<ChangeEvent> events = new List<ChangeEvent>();
         [SerializeField] private List<NotificationRecord> notifications = new List<NotificationRecord>();
+        // ビルド前検査の記録（Phase 5。古いものから順に、最大 MaxBuildRecords 件）。manifest に保存する
+        [SerializeField] private List<BuildCheckRecord> builds = new List<BuildCheckRecord>();
+
+        public const int MaxBuildRecords = 20;
 
         public HistoryState(string projectGuid)
         {
@@ -508,6 +572,26 @@ namespace TimelineBindingGuardian
         public List<ChangeEvent> Events => events;
         // 通知の状態（Phase 3）。v1 からの移行データには無い
         public List<NotificationRecord> Notifications => notifications ?? (notifications = new List<NotificationRecord>());
+        // ビルド前検査の記録（Phase 5）。古い順
+        public List<BuildCheckRecord> Builds => builds ?? (builds = new List<BuildCheckRecord>());
+
+        /// <summary>
+        /// 最新のビルド前検査の記録。無ければ null。
+        /// </summary>
+        public BuildCheckRecord LatestBuild => Builds.Count > 0 ? Builds[Builds.Count - 1] : null;
+
+        /// <summary>
+        /// ビルド前検査の記録を追加し、上限を超えた古いものを消す。
+        /// </summary>
+        public void AddBuild(BuildCheckRecord record)
+        {
+            Builds.Add(record);
+            int excess = Builds.Count - MaxBuildRecords;
+            if (excess > 0)
+            {
+                Builds.RemoveRange(0, excess);
+            }
+        }
 
         /// <summary>
         /// 同じ内容の文字列を 1 インスタンスにまとめる（読み込み後に呼ぶ）。
@@ -548,8 +632,10 @@ namespace TimelineBindingGuardian
             string scopeGuid,
             string scopePathHint,
             List<ContextSnapshot> contexts,
-            AssetKind scopeKind = AssetKind.Scene)
+            AssetKind scopeKind = AssetKind.Scene,
+            string fingerprint = "")
         {
+            Fingerprint = fingerprint ?? string.Empty;
             ObservationId = observationId;
             ObservedAtUtc = observedAtUtc;
             Reason = reason ?? string.Empty;
@@ -568,5 +654,62 @@ namespace TimelineBindingGuardian
         public string ScopeGuid { get; }
         public string ScopePathHint { get; }
         public List<ContextSnapshot> Contexts { get; }
+        // 検査時点のファイル内容の指紋（無ければ空）
+        public string Fingerprint { get; }
+    }
+
+    /// <summary>
+    /// ビルド前検査 1 回分の記録（Phase 5）。History の「前回ビルド以降」の基準になる。
+    /// checkedAtUtc は検査が終わった時刻（検査で見つかった変化はビルドより前の変化なので、それより後を「以降」とする）。
+    /// </summary>
+    [Serializable]
+    public sealed class BuildCheckRecord
+    {
+        [SerializeField] private string checkedAtUtc;
+        [SerializeField] private string platform;
+        [SerializeField] private List<string> scenePaths;
+        [SerializeField] private List<string> observationIds;
+        [SerializeField] private int newEventCount;
+        [SerializeField] private int newNotificationCount;
+        [SerializeField] private List<string> skippedReasons;
+        [SerializeField] private string error;
+
+        public BuildCheckRecord(string checkedAtUtc, string platform, List<string> scenePaths, List<string> observationIds,
+            int newEventCount, int newNotificationCount, List<string> skippedReasons, string error)
+        {
+            this.checkedAtUtc = checkedAtUtc ?? string.Empty;
+            this.platform = platform ?? string.Empty;
+            this.scenePaths = scenePaths ?? new List<string>();
+            this.observationIds = observationIds ?? new List<string>();
+            this.newEventCount = newEventCount;
+            this.newNotificationCount = newNotificationCount;
+            this.skippedReasons = skippedReasons ?? new List<string>();
+            this.error = error ?? string.Empty;
+        }
+
+        public string CheckedAtUtc => checkedAtUtc ?? string.Empty;
+        public string Platform => platform ?? string.Empty;
+        public List<string> ScenePaths => scenePaths ?? (scenePaths = new List<string>());
+        public List<string> ObservationIds => observationIds ?? (observationIds = new List<string>());
+        public int NewEventCount => newEventCount;
+        public int NewNotificationCount => newNotificationCount;
+        public List<string> SkippedReasons => skippedReasons ?? (skippedReasons = new List<string>());
+        public string Error => error ?? string.Empty;
+
+        /// <summary>
+        /// 観測時刻がこの検査より後か（History の「前回ビルド以降」）。時刻を読めなければ true（表示から漏らさない）。
+        /// </summary>
+        public bool IsObservedAfter(string observedAtUtc)
+        {
+            System.Globalization.DateTimeStyles styles = System.Globalization.DateTimeStyles.RoundtripKind;
+            bool observedParsed = DateTime.TryParse(observedAtUtc, System.Globalization.CultureInfo.InvariantCulture, styles, out DateTime observed);
+            bool checkedParsed = DateTime.TryParse(CheckedAtUtc, System.Globalization.CultureInfo.InvariantCulture, styles, out DateTime checkedAt);
+            if (!observedParsed || !checkedParsed)
+            {
+                return true;
+            }
+
+            return observed.ToUniversalTime() > checkedAt.ToUniversalTime();
+        }
     }
 }

@@ -80,6 +80,8 @@ namespace TimelineBindingGuardian
             table["views.history.period.last7Days"] = ("Last 7 days", "過去 7 日間");
             table["views.history.period.sinceDate"] = ("Since date", "指定日時以降");
             table["views.history.period.allTime"] = ("All time", "全期間");
+            table["views.history.period.sinceLastBuild"] = ("Since last build ({0})", "前回ビルド以降（{0}）");
+            table["views.history.period.sinceLastBuild.none"] = ("Since last build (no record)", "前回ビルド以降（記録なし）");
             table["views.history.type.bindingChangesOnly"] = ("Binding changes only", "バインドの変化のみ");
             table["views.history.type.all"] = ("All types", "すべての種別");
             table["views.history.since.tooltip"] = ("Local date/time, e.g. 2026-11-27 or 2026-11-27 10:00", "ローカルの日付・時刻（例: 2026-11-27、2026-11-27 10:00）");
